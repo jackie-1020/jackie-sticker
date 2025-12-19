@@ -1,0 +1,2701 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="app-version" content="3.0.1">
+    <title>傑克貼圖 3.0 (Pro)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@900&family=Noto+Serif+TC:wght@900&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            overscroll-behavior: none;
+            background-color: #020617; /* slate-950 */
+            color: #e2e8f0; /* slate-200 */
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none; 
+            font-family: 'Noto Sans TC', sans-serif;
+            height: 100vh;
+            height: 100dvh; /* Mobile viewport fix */
+        }
+        
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 10px); }
+
+        /* Checker Background */
+        .bg-checker {
+            background-color: #1e293b; /* slate-800 */
+            background-image:
+                linear-gradient(45deg, #334155 25%, transparent 25%, transparent 75%, #334155 75%, #334155),
+                linear-gradient(45deg, #334155 25%, transparent 25%, transparent 75%, #334155 75%, #334155);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+        }
+
+        .cursor-crosshair { cursor: crosshair; }
+        .cursor-grab { cursor: grab; }
+        .cursor-grabbing { cursor: grabbing; }
+
+        .tool-active {
+            background-color: #6366f1 !important; /* indigo-500 */
+            color: white !important;
+            border-color: transparent !important;
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.2);
+        }
+
+        #canvasWrapper {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform-origin: center center;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+        }
+
+        .canvas-stack {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+        }
+        
+        #mainCanvas, #maskCanvas { pointer-events: auto; }
+        #maskCanvas { opacity: 0.5; }
+        #lassoCanvas { pointer-events: none; z-index: 25; }
+        #textLayer { pointer-events: none; overflow: visible; }
+
+        /* Floating Text */
+        .floating-text {
+            position: absolute;
+            cursor: move;
+            pointer-events: auto;
+            user-select: none;
+            white-space: nowrap;
+            font-weight: 900;
+            text-align: center;
+            line-height: 1.2;
+            padding: 4px 8px;
+            border: 2px dashed transparent;
+            transition: border 0.2s;
+            transform: translate(-50%, -50%);
+            paint-order: stroke fill;
+        }
+        .floating-text:active, .floating-text.editing {
+            border: 2px dashed rgba(99, 102, 241, 0.8);
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            z-index: 100;
+        }
+        .delete-btn {
+            position: absolute; top: -10px; right: -10px; width: 20px; height: 20px;
+            background: #ef4444; color: white; border-radius: 50%; font-size: 12px;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.5); display: none; 
+            z-index: 101;
+        }
+        .floating-text:hover .delete-btn, .floating-text:active .delete-btn { display: flex; }
+
+        img#resultImage { -webkit-touch-callout: default; pointer-events: auto; }
+
+        #brushCursor {
+            position: fixed;
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 100;
+            display: none;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Tray & Thumbs */
+        .tray-thumb {
+            width: 64px; height: 64px;
+            border-radius: 8px;
+            border: 2px solid transparent;
+            background-color: #1e293b;
+            background-size: cover; background-position: center;
+            flex-shrink: 0; cursor: pointer;
+            position: relative;
+            overflow: visible;
+            transition: all 0.2s;
+            touch-action: manipulation;
+        }
+        .tray-thumb.active { border-color: #6366f1; transform: translateY(-4px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.5); }
+        .tray-add {
+            width: 64px; height: 64px;
+            border-radius: 8px;
+            border: 2px dashed #475569;
+            display: flex; align-items: center; justify-content: center;
+            color: #475569; cursor: pointer; flex-shrink: 0;
+            transition: all 0.2s;
+        }
+        .tray-add:hover { border-color: #6366f1; color: #6366f1; background: #1e293b; }
+
+        /* Chat Simulator */
+        .chat-bg-light { background-color: #7292cc; }
+        .chat-bubble-left-light {
+            background-color: white;
+            border-radius: 12px; border-top-left-radius: 2px;
+            padding: 8px 12px; position: relative; font-size: 14px; color: #333;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+        }
+        .chat-bubble-left-light::before {
+            content: ''; position: absolute; left: -6px; top: 0; width: 0; height: 0;
+            border-style: solid; border-width: 0 8px 12px 0; border-color: transparent white transparent transparent;
+        }
+        .chat-text-light { color: #333; }
+        .chat-meta-light { color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+
+        .chat-bg-dark { background-color: #1b1b1b; }
+        .chat-bubble-left-dark {
+            background-color: #2b2b2b;
+            border-radius: 12px; border-top-left-radius: 2px;
+            padding: 8px 12px; position: relative; font-size: 14px; color: #e2e8f0;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.3);
+        }
+        .chat-bubble-left-dark::before {
+            content: ''; position: absolute; left: -6px; top: 0; width: 0; height: 0;
+            border-style: solid; border-width: 0 8px 12px 0; border-color: transparent #2b2b2b transparent transparent;
+        }
+        .chat-text-dark { color: #e2e8f0; }
+        .chat-meta-dark { color: #64748b; }
+
+        /* Crop */
+        #cropContent { transform-origin: center center; position: absolute; top: 50%; left: 50%; }
+        .crop-selection { border: 2px dashed #fff; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.8); position: absolute; pointer-events: none; z-index: 50; }
+        
+        /* Form Elements */
+        input[type=range] { background-color: #334155; }
+        input[type=checkbox] { accent-color: #6366f1; width: 16px; height: 16px; }
+
+        .toast-enter { transform: translateY(100%); opacity: 0; }
+        .toast-active { transform: translateY(0); opacity: 1; }
+    </style>
+</head>
+<body class="text-slate-200 font-sans h-screen flex flex-col overflow-hidden">
+
+    <!-- 1. Header -->
+    <div class="bg-slate-900 p-2 text-white flex justify-between items-center shrink-0 shadow-md z-30 border-b border-slate-800">
+        <div class="flex items-center gap-2">
+            <div class="bg-indigo-600 p-2 rounded-lg relative shadow-lg shadow-indigo-500/20">
+                <i class="fas fa-check-double"></i>
+                <div id="saveIndicator" class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-slate-900 hidden" title="已儲存"></div>
+            </div>
+            <div>
+                <h1 class="text-sm font-bold text-slate-100">傑克貼圖</h1>
+                <p class="text-[10px] text-slate-500">3.0 Pro (v3.0.1)</p>
+            </div>
+        </div>
+        
+        <div class="flex gap-2 items-center">
+            <button id="helpBtn" class="bg-slate-700 hover:bg-slate-600 text-slate-200 w-8 h-8 rounded-md text-xs flex items-center justify-center transition" title="關於與分享">
+                <i class="fas fa-question"></i>
+            </button>
+            <button id="previewBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1 disabled:opacity-50 disabled:bg-slate-700" disabled>
+                <i class="fas fa-eye"></i> 預覽
+            </button>
+            <button id="bgToggleBtn" class="bg-black border border-slate-600 w-8 h-8 rounded-md text-xs text-slate-400 flex items-center justify-center">黑</button>
+            
+            <div class="w-px bg-slate-700 mx-1 h-6 self-center"></div>
+            
+            <button id="undoBtn" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed" disabled title="復原">
+                <i class="fas fa-reply"></i>
+            </button>
+            
+            <button id="autoRunBtn" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm" disabled title="一鍵去背">
+                <i class="fas fa-bolt"></i> 一鍵
+            </button>
+        </div>
+    </div>
+
+    <!-- 2. Top Toolbar -->
+    <div class="bg-slate-900 border-b border-slate-800 p-2 shrink-0 z-20 shadow-sm space-y-2">
+        <!-- Main Actions -->
+        <div class="flex gap-2 items-center overflow-x-auto no-scrollbar pb-1">
+            <label class="bg-indigo-900/30 text-indigo-300 px-2 md:px-3 py-1.5 rounded-md font-bold text-xs md:text-sm cursor-pointer flex items-center gap-1 md:gap-2 border border-indigo-700/50 shrink-0 hover:bg-indigo-900/50 transition">
+                <i class="fas fa-folder-open"></i> 開啟
+                <input type="file" id="imageInput" accept="image/*" class="hidden">
+            </label>
+
+            <select id="stickerSizeSelect" class="bg-slate-800 text-indigo-300 h-8 px-2 rounded-md font-bold text-xs border border-indigo-700/50 focus:outline-none focus:border-indigo-500 cursor-pointer shrink-0">
+                <option value="sticker">貼圖 (370x320)</option>
+                <option value="main">主要 (240x240)</option>
+                <option value="emoji">表情貼 (180x180)</option>
+                <option value="tab">標籤 (96x74)</option>
+                <option value="big">大貼圖 (800x800)</option>
+                <option value="tall_big">長貼圖 (396x660)</option>
+            </select>
+
+            <button id="cropBtn" class="bg-slate-800 text-slate-300 px-2 md:px-3 py-1.5 rounded-md font-bold text-xs flex items-center gap-1 hover:bg-slate-700 transition disabled:opacity-50 shrink-0" disabled>
+                <i class="fas fa-crop-alt"></i> 裁切
+            </button>
+            
+            <button id="resetEditorBtn" class="bg-red-800/50 text-red-300 px-2 md:px-3 py-1.5 rounded-md font-bold text-xs flex items-center gap-1 hover:bg-red-800/70 transition disabled:opacity-50 shrink-0" disabled>
+                <i class="fas fa-trash-restore"></i> 重置
+            </button>
+
+            <div class="h-6 w-px bg-slate-700 mx-1 shrink-0"></div>
+            
+            <button id="adjustBtn" class="bg-slate-800 text-indigo-400 px-2 md:px-3 py-1.5 rounded-md font-bold text-xs flex items-center gap-1 hover:bg-slate-700 transition disabled:opacity-50 shrink-0" disabled>
+                <i class="fas fa-sliders-h"></i> 調色
+            </button>
+            
+            <button id="outlineBtn" class="bg-slate-800 text-indigo-400 px-2 md:px-3 py-1.5 rounded-md font-bold text-xs flex items-center gap-1 hover:bg-slate-700 transition disabled:opacity-50 shrink-0" disabled>
+                <i class="fas fa-border-style"></i> 描邊
+            </button>
+
+            <button id="frameBtn" class="bg-slate-800 text-indigo-400 px-2 md:px-3 py-1.5 rounded-md font-bold text-xs flex items-center gap-1 hover:bg-slate-700 transition disabled:opacity-50 shrink-0" disabled>
+                <i class="fas fa-square"></i> 邊框
+            </button>
+
+            <button id="shadowBtn" class="bg-slate-800 text-indigo-400 px-2 md:px-3 py-1.5 rounded-md font-bold text-xs flex items-center gap-1 hover:bg-slate-700 transition disabled:opacity-50 shrink-0" disabled>
+                <i class="fas fa-cloud"></i> 陰影
+            </button>
+
+            <button id="textBtn" class="bg-slate-800 text-indigo-400 px-2 md:px-3 py-1.5 rounded-md font-bold text-xs flex items-center gap-1 hover:bg-slate-700 transition disabled:opacity-50 shrink-0" disabled>
+                <i class="fas fa-font"></i> 文字
+            </button>
+        </div>
+
+        <!-- Tool Palette -->
+        <div class="flex bg-slate-800 p-1 rounded-md gap-1 flex-1 overflow-x-auto no-scrollbar border border-slate-700">
+            <button id="btnMove" data-tool="move" class="flex-1 min-w-[50px] py-1.5 rounded-md text-slate-400 font-bold text-xs flex items-center justify-center gap-1 transition border border-transparent tool-active whitespace-nowrap tool-btn">
+                <i class="fas fa-hand-paper"></i> 移動
+            </button>
+            <button id="btnWand" data-tool="wand" class="flex-1 min-w-[50px] py-1.5 rounded-md text-slate-400 font-bold text-xs flex items-center justify-center gap-1 transition border border-transparent whitespace-nowrap tool-btn">
+                <i class="fas fa-magic"></i> 魔術棒
+            </button>
+            <button id="btnBucket" data-tool="bucket" class="flex-1 min-w-[50px] py-1.5 rounded-md text-slate-400 font-bold text-xs flex items-center justify-center gap-1 transition border border-transparent whitespace-nowrap tool-btn">
+                <i class="fas fa-fill-drip"></i> 油漆桶
+            </button>
+            <button id="btnDraw" data-tool="draw" class="flex-1 min-w-[50px] py-1.5 rounded-md text-slate-400 font-bold text-xs flex items-center justify-center gap-1 transition border border-transparent whitespace-nowrap tool-btn">
+                <i class="fas fa-paint-brush"></i> 塗鴉
+            </button>
+            <button id="btnEyedropper" data-tool="eyedropper" class="flex-1 min-w-[50px] py-1.5 rounded-md text-slate-400 font-bold text-xs flex items-center justify-center gap-1 transition border border-transparent whitespace-nowrap tool-btn">
+                <i class="fas fa-eye-dropper"></i> 吸管
+            </button>
+            <button id="btnLasso" data-tool="lasso" class="flex-1 min-w-[50px] py-1.5 rounded-md text-slate-400 font-bold text-xs flex items-center justify-center gap-1 transition border border-transparent whitespace-nowrap tool-btn">
+                <i class="fas fa-vector-square"></i> 套索
+            </button>
+            
+            <div class="w-px bg-slate-600 h-4 self-center mx-1"></div>
+
+            <button id="btnProtect" data-tool="protect" class="flex-1 min-w-[50px] py-1.5 rounded-md text-slate-400 font-bold text-xs flex items-center justify-center gap-1 transition border border-transparent whitespace-nowrap tool-btn">
+                <i class="fas fa-shield-alt text-red-400"></i> 保護
+            </button>
+            <button id="btnMaskEraser" data-tool="mask-eraser" class="flex-1 min-w-[50px] py-1.5 rounded-md text-slate-400 font-bold text-xs flex items-center justify-center gap-1 transition border border-transparent whitespace-nowrap tool-btn">
+                <i class="fas fa-eraser text-slate-300"></i> 修正
+            </button>
+             <button id="btnClearMask" class="w-8 py-1.5 rounded-md text-slate-400 font-bold text-xs flex items-center justify-center transition hover:text-red-400 hidden" title="清除所有保護">
+                <i class="fas fa-trash-alt"></i>
+            </button>
+            <button id="btnRestore" data-tool="restore" class="flex-1 min-w-[50px] py-1.5 rounded-md text-slate-400 font-bold text-xs flex items-center justify-center gap-1 transition border border-transparent whitespace-nowrap tool-btn">
+                <i class="fas fa-history text-green-400"></i> 還原
+            </button>
+        </div>
+
+        <!-- Sliders -->
+        <div class="grid grid-cols-2 gap-3 px-1">
+            <div class="flex flex-col justify-center">
+                 <div class="flex justify-between text-[10px] text-slate-500 font-bold mb-1" id="sliderLabel">
+                    <span>精細</span><span id="sliderVal" class="bg-slate-800 px-1.5 rounded text-indigo-400 border border-slate-700">15</span><span>寬鬆</span>
+                </div>
+                <input type="range" id="mainSlider" min="1" max="100" value="15" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+            </div>
+            <div class="flex flex-col justify-center">
+                 <div class="flex justify-between text-[10px] text-slate-500 font-bold mb-1" id="sliderLabel2">
+                    <span>最小</span><span><i class="fas fa-search"></i> 縮放</span><span>最大</span>
+                </div>
+                <input type="range" id="scaleSlider" min="0.1" max="5.0" step="0.01" value="1" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+            </div>
+        </div>
+
+        <!-- Context Hint -->
+        <div id="hintStrip" class="bg-slate-800 text-indigo-300 text-[11px] px-2 py-1 rounded border border-slate-700 flex items-center justify-between">
+            <div class="flex items-center overflow-hidden">
+                <i class="fas fa-info-circle mr-1 shrink-0"></i>
+                <span id="hintText" class="truncate">請先選擇或上傳一張貼圖</span>
+            </div>
+            <!-- Lasso controls -->
+            <div id="lassoControls" class="hidden flex gap-2">
+                <button id="lassoUndo" class="text-xs bg-slate-700 border border-slate-600 px-2 rounded hover:bg-slate-600 text-white">撤銷點</button>
+                <button id="lassoComplete" class="text-xs bg-indigo-600 text-white px-2 rounded hover:bg-indigo-500">完成去背</button>
+            </div>
+        </div>
+
+        <!-- Draw/Tool Settings -->
+        <div id="toolSettings" class="hidden bg-slate-800 p-2 rounded border border-slate-700 mt-2 flex items-center gap-2 overflow-x-auto">
+            <!-- Colors Group -->
+            <div id="colorSettings" class="flex items-center gap-2 shrink-0">
+                <div class="text-[10px] text-slate-500 font-bold shrink-0">顏色</div>
+                <div class="flex gap-2" id="brushColorPalette">
+                    <!-- JS Generated -->
+                </div>
+                <div class="flex items-center gap-2 text-xs font-bold text-slate-300 border-l border-slate-600 pl-2 ml-1">
+                    <i class="fas fa-circle" id="currentBrushColorDisplay" style="color: #ffffff"></i>
+                </div>
+            </div>
+            
+            <!-- Shape Group -->
+            <div id="shapeSettings" class="flex items-center gap-2 pl-2 shrink-0 border-l border-slate-600" style="display: none;">
+                <div class="text-[10px] text-slate-500 font-bold shrink-0">筆刷形狀</div>
+                <div class="flex bg-slate-900 rounded-lg p-0.5 border border-slate-700">
+                    <button id="btnShapeCircle" class="w-7 h-7 rounded flex items-center justify-center bg-indigo-600 text-white transition hover:bg-indigo-500"><i class="fas fa-circle text-[8px]"></i></button>
+                    <button id="btnShapeSquare" class="w-7 h-7 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition"><i class="fas fa-square text-[10px]"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Canvas Workspace -->
+    <div id="canvasContainer" class="flex-1 bg-checker relative overflow-hidden touch-none p-4 w-full cursor-move-grab">
+        <div id="canvasWrapper" class="relative origin-center">
+            <canvas id="originalCanvasHidden" class="hidden"></canvas>
+            <canvas id="mainCanvas" class="canvas-stack z-10 shadow-xl transition-[filter] duration-75"></canvas>
+            <canvas id="maskCanvas" class="canvas-stack z-20"></canvas>
+            <canvas id="lassoCanvas" class="canvas-stack"></canvas>
+            <div id="textLayer" class="canvas-stack z-30"></div>
+        </div>
+        <div id="brushCursor"></div>
+        <div id="placeholder" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 z-40 text-slate-500">
+            <div class="bg-slate-800 p-6 rounded-full mb-4 animate-bounce border border-slate-700 shadow-2xl">
+                <i class="fas fa-folder-plus text-4xl text-indigo-500"></i>
+            </div>
+            <p class="font-bold text-lg text-slate-400">點擊下方「+」新增貼圖</p>
+        </div>
+        <div id="loading" class="absolute inset-0 bg-black/90 z-50 hidden flex flex-col items-center justify-center backdrop-blur-sm">
+            <div class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mb-4"></div>
+            <p class="text-white font-bold" id="loadingText">處理中...</p>
+            <button id="cancelLoadingBtn" class="mt-4 px-4 py-2 border border-white/30 text-white rounded-lg text-xs hover:bg-white/10 transition">取消</button>
+        </div>
+        <button id="fitViewBtn" class="absolute bottom-4 right-4 bg-slate-800/80 backdrop-blur-sm text-slate-400 px-3 py-2 rounded-full text-xs font-bold transition flex items-center gap-1 hover:bg-slate-700/80 border border-slate-700 disabled:opacity-30" disabled title="縮放至適中大小">
+            <i class="fas fa-compress-arrows-alt"></i> 適中
+        </button>
+    </div>
+
+    <!-- 4. Sticker Tray -->
+    <div class="bg-slate-900 border-t border-slate-800 p-2 shrink-0 z-40 flex flex-col gap-2 pb-safe">
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar p-3" id="stickerTray">
+            <div class="tray-add" id="addStickerBtn">
+                <i class="fas fa-plus text-2xl"></i>
+            </div>
+        </div>
+        
+        <div class="flex gap-2">
+            <button id="downloadPackBtn" class="flex-1 bg-slate-800 text-slate-200 border border-slate-700 h-10 rounded-xl font-bold shadow active:scale-[0.98] transition disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-2 text-sm hover:bg-slate-700">
+                <i class="fas fa-file-archive"></i> 下載貼圖包 (ZIP)
+            </button>
+            <button id="finishBtn" class="flex-1 bg-indigo-600 text-white h-10 rounded-xl font-bold shadow active:scale-[0.98] transition disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-2 text-sm hover:bg-indigo-500" disabled>
+                <i class="fas fa-download"></i> 下載單張
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-32 left-1/2 -translate-x-1/2 bg-slate-800/90 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg transition-all duration-300 pointer-events-none opacity-0 translate-y-full z-50 border border-slate-700">
+        已自動儲存
+    </div>
+    
+    <!-- Custom Confirmation Modal -->
+    <div id="confirmModal" class="fixed inset-0 bg-black/80 z-[1000] hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 w-full max-w-xs rounded-xl shadow-2xl p-6 border border-slate-700">
+            <p id="confirmMessage" class="text-white font-bold mb-6 text-center text-lg">您確定要刪除這張貼圖嗎？</p>
+            <div class="flex gap-4">
+                <button id="confirmCancelBtn" class="flex-1 py-2 text-slate-400 rounded-lg border border-slate-600 hover:bg-slate-700 transition">取消</button>
+                <button id="confirmYesBtn" class="flex-1 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-500 transition">確認刪除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help/Share Modal -->
+    <div id="helpModal" class="fixed inset-0 bg-black/80 z-[1000] hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 w-full max-w-sm rounded-2xl shadow-2xl p-6 border border-slate-700 text-center animate-scale-in">
+            <div class="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-500/20">
+                <i class="fas fa-check-double text-3xl text-white"></i>
+            </div>
+            <h3 class="text-white text-xl font-bold mb-1">傑克貼圖 3.0 Pro</h3>
+            <p class="text-slate-400 text-xs mb-6">最強大的單檔網頁版貼圖製作工具</p>
+            
+            <div class="bg-slate-900/50 rounded-xl p-4 text-left text-sm text-slate-300 space-y-4 mb-6 border border-slate-700/50">
+                <div>
+                    <h4 class="text-indigo-400 font-bold mb-1"><i class="fas fa-share-alt mr-1"></i> 如何分享給朋友？</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed">本程式為「單一 HTML 檔案」。您只需將此檔案 (index.html) 傳送給朋友，他們直接用瀏覽器打開即可使用，無需安裝！</p>
+                </div>
+                <div>
+                    <h4 class="text-indigo-400 font-bold mb-1"><i class="fas fa-save mr-1"></i> 如何儲存本程式？</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        電腦版 (Mac/PC)：在頁面空白處按右鍵 &gt; 「另存新檔」 &gt; 存為 .html 即可。<br>
+                        手機版：使用瀏覽器的「分享」&gt;「加入主畫面」。
+                    </p>
+                </div>
+                <div>
+                    <h4 class="text-green-400 font-bold mb-1"><i class="fas fa-user-shield mr-1"></i> 隱私安全</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed">所有圖片運算皆在您的裝置瀏覽器上進行，照片<span class="text-white font-bold">不會</span>上傳至任何伺服器，請安心使用。</p>
+                </div>
+                <div>
+                    <h4 class="text-amber-400 font-bold mb-1"><i class="fas fa-list mr-1"></i> 更新紀錄</h4>
+                    <div class="text-xs text-slate-400 leading-relaxed space-y-1" id="changelogBox">
+                        <div>v3.0.1 - 新增：拖曳圖片到畫布直接新增貼圖；快捷鍵 Ctrl/Cmd+Z、Delete、Esc</div>
+                        <div>v3.0.0 - 初版：多工具去背、文字、描邊、邊框、陰影、ZIP打包</div>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <button id="closeHelpBtn" class="w-full py-3 bg-slate-700 text-white rounded-xl font-bold hover:bg-slate-600 transition border border-slate-600">了解</button>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <!-- Crop Modal -->
+    <div id="cropModal" class="fixed inset-0 bg-black/90 z-50 hidden flex flex-col">
+        <div class="bg-slate-800 p-3 text-white flex justify-between items-center shrink-0 border-b border-slate-700">
+            <h3 class="font-bold flex items-center gap-2"><i class="fas fa-crop-alt"></i> 裁切模式</h3>
+            <button id="cancelCropBtn" class="text-slate-400 hover:text-white text-sm border border-slate-600 px-3 py-1 rounded">取消</button>
+        </div>
+        <div class="bg-slate-900 p-2 flex gap-2 justify-between items-center shrink-0 border-b border-slate-800">
+            <div class="flex gap-2">
+                <button id="btnCropMove" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1"><i class="fas fa-hand-paper"></i> 移動</button>
+                <button id="btnCropSelect" class="bg-slate-700 text-slate-300 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1"><i class="fas fa-vector-square"></i> 框選</button>
+            </div>
+            <div class="flex items-center gap-2">
+                <i class="fas fa-search-minus text-slate-400 text-xs"></i>
+                <input type="range" id="cropScaleSlider" min="0.1" max="5.0" step="0.01" value="1" class="w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                <i class="fas fa-search-plus text-slate-400 text-xs"></i>
+            </div>
+        </div>
+        <div class="flex-1 relative overflow-hidden flex items-center justify-center bg-black/80 touch-none" id="cropContainer">
+            <div id="cropContent" class="relative origin-center">
+                <canvas id="cropCanvas"></canvas>
+                <div id="cropSelection" class="hidden crop-selection"></div>
+            </div>
+        </div>
+        <div class="p-4 bg-slate-800 shrink-0 flex justify-center pb-safe border-t border-slate-700">
+            <button id="confirmCropBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:grayscale transition w-full max-w-sm" disabled>
+                <i class="fas fa-check mr-2"></i> 確認裁切
+            </button>
+        </div>
+    </div>
+
+    <!-- Adjust Modal (With Filters) -->
+    <div id="adjustModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 w-full max-w-sm rounded-2xl shadow-2xl p-4 animate-scale-in border border-slate-700">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-slate-100 flex items-center gap-2"><i class="fas fa-sliders-h text-indigo-500"></i> 圖片調色</h3>
+                <button id="closeAdjustModalBtn" class="text-slate-400 hover:text-slate-200"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <!-- Filters Section -->
+            <div class="mb-4">
+                <label class="text-xs font-bold text-slate-400 mb-2 block">快速濾鏡</label>
+                <div class="flex gap-2 overflow-x-auto no-scrollbar pb-2" id="filterPalette">
+                    <!-- JS Generated -->
+                </div>
+            </div>
+
+            <div class="space-y-4 mb-6">
+                <div><div class="flex justify-between text-xs font-bold text-slate-400 mb-1"><span>亮度</span><span id="brightnessVal">100%</span></div><input type="range" id="brightnessSlider" min="0" max="200" value="100" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"></div>
+                <div><div class="flex justify-between text-xs font-bold text-slate-400 mb-1"><span>對比度</span><span id="contrastVal">100%</span></div><input type="range" id="contrastSlider" min="0" max="200" value="100" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"></div>
+                <div><div class="flex justify-between text-xs font-bold text-slate-400 mb-1"><span>飽和度</span><span id="saturationVal">100%</span></div><input type="range" id="saturationSlider" min="0" max="200" value="100" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"></div>
+            </div>
+            <div class="flex gap-2">
+                <button id="resetAdjustBtn" class="flex-1 border border-slate-600 text-slate-300 py-3 rounded-xl font-bold hover:bg-slate-700 transition">重置</button>
+                <button id="confirmAdjustBtn" class="flex-[2] bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-500 transition">完成</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Text Editor -->
+    <div id="textEditorModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 w-full max-w-sm rounded-2xl shadow-2xl p-4 animate-scale-in border border-slate-700">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-slate-100 flex items-center gap-2"><i class="fas fa-pen-nib text-indigo-500"></i> 編輯文字</h3>
+                <button id="closeTextEditorBtn" class="text-slate-400 hover:text-slate-200"><i class="fas fa-times"></i></button>
+            </div>
+            <input type="text" id="textInput" class="w-full bg-slate-900 border-2 border-slate-700 rounded-xl p-3 text-lg font-bold text-center mb-4 text-white focus:border-indigo-500 focus:outline-none" placeholder="輸入文字..." autofocus>
+            <div class="mb-4"><div class="flex justify-between text-xs font-bold text-slate-400 mb-1"><span>字體大小</span><span id="sizeValDisplay" class="bg-slate-700 px-1.5 rounded text-indigo-400">50px</span></div><input type="range" id="sizeSlider" min="10" max="300" value="50" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"></div>
+            <div class="mb-4"><div class="flex justify-between text-xs font-bold text-slate-400 mb-1"><span>描邊粗細</span><span id="strokeValDisplay" class="bg-slate-700 px-1.5 rounded text-indigo-400">15%</span></div><input type="range" id="strokeSlider" min="0" max="40" value="15" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"></div>
+            <div class="mb-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-slate-300">色盤組</span>
+                    <div class="flex gap-1 flex-wrap justify-end" id="outlineStyleSetSwitch"></div>
+                </div>
+            </div>
+            <div class="mb-4"><label class="text-xs font-bold text-slate-400 mb-2 block">描邊顏色</label><div class="flex gap-2 justify-center flex-wrap" id="strokeColorPalette"></div></div>
+            <div class="mb-4"><label class="text-xs font-bold text-slate-400 mb-2 block">文字顏色</label><div class="flex gap-2 justify-center flex-wrap" id="colorPalette"></div></div>
+            <div class="mb-6"><label class="text-xs font-bold text-slate-400 mb-2 block">選擇字體</label><div class="flex gap-2" id="fontBtnContainer">
+                <button data-font="Noto Sans TC" class="font-btn flex-1 py-2 border border-slate-600 rounded-lg text-sm font-bold text-slate-300 hover:bg-slate-700" style="font-family: 'Noto Sans TC'">標準</button>
+                <button data-font="ZCOOL KuaiLe" class="font-btn flex-1 py-2 border border-slate-600 rounded-lg text-sm font-bold text-slate-300 hover:bg-slate-700" style="font-family: 'ZCOOL KuaiLe'">俏皮</button>
+                <button data-font="Noto Serif TC" class="font-btn flex-1 py-2 border border-slate-600 rounded-lg text-sm font-bold text-slate-300 hover:bg-slate-700" style="font-family: 'Noto Serif TC'">文青</button>
+            </div></div>
+            <button id="confirmAddTextBtn" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-500 transition">確定/修改</button>
+        </div>
+    </div>
+
+    <!-- Outline Modal -->
+    <div id="outlineModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 w-full max-w-sm rounded-2xl shadow-2xl p-4 animate-scale-in border border-slate-700">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-slate-100 flex items-center gap-2"><i class="fas fa-border-style text-indigo-500"></i> 貼圖全域描邊</h3>
+                <button id="closeOutlineModalBtn" class="text-slate-400 hover:text-slate-200"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="mb-4"><label class="text-xs font-bold text-slate-400 mb-2 block">描邊顏色</label><div class="flex gap-2 justify-center flex-wrap" id="outlineColorPalette"></div></div>
+            <div class="mb-6"><div class="flex justify-between text-xs font-bold text-slate-400 mb-1"><span>粗細</span><span id="outlineValDisplay">5px</span></div><input type="range" id="outlineWidthSlider" min="0" max="30" value="5" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"></div>
+            <button id="applyOutlineBtn" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-500 transition">套用描邊</button>
+        </div>
+    </div>
+
+    <!-- Frame Modal -->
+    <div id="frameModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 w-full max-w-sm rounded-2xl shadow-2xl p-4 animate-scale-in border border-slate-700">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-slate-100 flex items-center gap-2"><i class="fas fa-square text-indigo-500"></i> 漫畫式邊框</h3>
+                <button id="closeFrameModalBtn" class="text-slate-400 hover:text-slate-200"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="mb-4">
+                <div class="flex justify-between items-center mb-2">
+                    <label class="text-xs font-bold text-slate-400">邊框顏色</label>
+                </div>
+                <div class="flex gap-2 justify-center flex-wrap" id="frameColorPalette"></div>
+            </div>
+             <div class="mb-4">
+                <div class="flex justify-between items-center mb-2">
+                    <label class="text-xs font-bold text-slate-400">背景填充</label>
+                </div>
+                <div class="flex gap-2 justify-center flex-wrap" id="frameBgPalette"></div>
+            </div>
+            <div class="space-y-4 mb-6">
+                <div><div class="flex justify-between text-xs font-bold text-slate-400 mb-1"><span>粗細</span><span id="frameWidthVal">10px</span></div><input type="range" id="frameWidthSlider" min="1" max="50" value="10" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"></div>
+                <div><div class="flex justify-between text-xs font-bold text-slate-400 mb-1"><span>圓角</span><span id="frameRadiusVal">0px</span></div><input type="range" id="frameRadiusSlider" min="0" max="100" value="0" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"></div>
+                <div><div class="flex justify-between text-xs font-bold text-slate-400 mb-1"><span>內縮 (留白)</span><span id="framePaddingVal">10px</span></div><input type="range" id="framePaddingSlider" min="0" max="100" value="10" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"></div>
+                <div class="flex items-center gap-2 pt-2 border-t border-slate-700">
+                    <input type="checkbox" id="frameSpeedLines" class="rounded border-slate-600 bg-slate-700 text-indigo-600">
+                    <label for="frameSpeedLines" class="text-sm font-bold text-slate-300 cursor-pointer select-none">💥 加上集中線特效 (Speed Lines)</label>
+                </div>
+            </div>
+            <button id="applyFrameBtn" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-500 transition">加上邊框</button>
+        </div>
+    </div>
+
+    <!-- Shadow Modal -->
+    <div id="shadowModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 w-full max-w-sm rounded-2xl shadow-2xl p-4 animate-scale-in border border-slate-700">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-slate-100 flex items-center gap-2"><i class="fas fa-cloud text-indigo-500"></i> 貼圖投影</h3>
+                <button id="closeShadowModalBtn" class="text-slate-400 hover:text-slate-200"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="mb-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-slate-300">色盤組</span>
+                    <div class="flex gap-1 flex-wrap justify-end" id="shadowStyleSetSwitch"></div>
+                </div>
+            </div>
+            <div class="mb-4"><label class="text-xs font-bold text-slate-400 mb-2 block">陰影顏色</label><div class="flex gap-2 justify-center flex-wrap" id="shadowColorPalette"></div></div>
+            <div class="space-y-4 mb-6">
+                <div><div class="flex justify-between text-xs font-bold text-slate-400 mb-1"><span>模糊度</span><span id="shadowBlurVal">10px</span></div><input type="range" id="shadowBlurSlider" min="0" max="50" value="10" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"></div>
+                <div><div class="flex justify-between text-xs font-bold text-slate-400 mb-1"><span>X 位移</span><span id="shadowXVal">5px</span></div><input type="range" id="shadowXSlider" min="-20" max="20" value="5" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"></div>
+                <div><div class="flex justify-between text-xs font-bold text-slate-400 mb-1"><span>Y 位移</span><span id="shadowYVal">5px</span></div><input type="range" id="shadowYSlider" min="-20" max="20" value="5" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"></div>
+            </div>
+            <button id="applyShadowBtn" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-500 transition">套用陰影</button>
+        </div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div id="previewModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-scale-in flex flex-col max-h-[80vh] border border-slate-700">
+            <div class="bg-slate-800 p-3 text-white flex justify-between items-center shrink-0 border-b border-slate-700">
+                <h3 class="font-bold flex items-center gap-2"><i class="fas fa-comment-dots text-green-400"></i> 聊天室預覽</h3>
+                <div class="flex items-center gap-3">
+                    <button id="previewThemeToggle" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-slate-300 border border-slate-600 transition">
+                        <i class="fas fa-adjust"></i> 切換背景
+                    </button>
+                    <button id="closePreviewBtn" class="text-white/80 hover:text-white"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+            <div id="previewContainer" class="flex-1 chat-bg-light p-4 overflow-y-auto space-y-4 transition-colors duration-300">
+                <div class="flex items-start gap-2">
+                    <div class="w-8 h-8 rounded-full bg-slate-300 flex items-center justify-center text-slate-500 text-xs font-bold">F</div>
+                    <div class="flex flex-col gap-1 max-w-[70%]"><span class="chat-text-light text-[10px] ml-1 chat-name">Friend</span><div class="chat-bubble-left-light chat-bubble">今天去哪裡玩？</div></div>
+                </div>
+                <div class="flex justify-center"><span class="bg-black/20 text-white text-[10px] px-2 py-0.5 rounded-full">Today</span></div>
+                <div class="flex flex-col items-end gap-1"><div class="max-w-[150px] md:max-w-[180px]"><img id="previewImage" class="w-full h-auto object-contain"></div><span class="chat-meta-light text-[10px] mr-1 chat-meta">Read 10:30 AM</span></div>
+                <div class="flex items-start gap-2">
+                    <div class="w-8 h-8 rounded-full bg-slate-300 flex items-center justify-center text-slate-500 text-xs font-bold">F</div>
+                    <div class="flex flex-col gap-1 max-w-[70%]"><span class="chat-text-light text-[10px] ml-1 chat-name">Friend</span><div class="chat-bubble-left-light chat-bubble">哇！這貼圖好可愛！🤩</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Result Modal -->
+    <div id="resultOverlay" class="fixed inset-0 bg-slate-950/95 z-50 hidden flex flex-col items-center justify-center p-6">
+        <h3 class="text-white text-xl font-bold mb-2">🎉 製作完成</h3>
+        <p class="text-slate-400 text-xs mb-4 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">長按圖片 或 點擊下載</p>
+        <div class="bg-checker p-1 rounded-lg shadow-2xl mb-6 border border-slate-700 max-w-full max-h-[55vh] overflow-hidden flex items-center justify-center"><img id="resultImage" class="max-w-full max-h-full object-contain block"></div>
+        <div class="flex gap-4 w-full max-w-sm justify-center">
+            <button id="closeResultBtn" class="flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold shadow-lg active:scale-95 transition flex items-center justify-center gap-2 border border-slate-600 hover:bg-slate-700"><i class="fas fa-arrow-left"></i> 編輯</button>
+            <button id="downloadResultBtn" class="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold shadow-lg active:scale-95 transition flex items-center justify-center gap-2 hover:bg-green-500"><i class="fas fa-download"></i> 下載</button>
+        </div>
+    </div>
+
+    <script>
+        const APP_VERSION = document.querySelector('meta[name="app-version"]')?.content || '3.0.1';
+        const BUILD_TIME = new Date().toISOString();
+
+        // Append version to document title (avoid double append)
+        if (!/\(v\d+\./.test(document.title)) {
+            document.title = document.title.replace(/\s*\(v.*?\)\s*$/, '') + ` (v${APP_VERSION})`;
+        }
+
+        // --- Utility Functions ---
+        const debounce = (func, delay) => {
+            let timeout;
+            return function(...args) {
+                const context = this;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), delay);
+            };
+        };
+
+        // --- IndexedDB Helper (Persist Data) ---
+        const DB_NAME = 'StickerLabDB_v2';
+        const DB_STORE = 'projects';
+        const dbPromise = new Promise((resolve, reject) => {
+            const req = indexedDB.open(DB_NAME, 1);
+            req.onupgradeneeded = (e) => { e.target.result.createObjectStore(DB_STORE, { keyPath: 'id' }); };
+            req.onsuccess = (e) => resolve(e.target.result);
+            req.onerror = (e) => reject(e);
+        });
+
+        // --- Web Worker (Flood Fill) ---
+        const workerCode = `
+            self.onmessage = function(e) {
+                const { type, imageData, maskData, seeds, tolerance, width, height, mode, fillColor } = e.data;
+                if (type === 'floodFill') {
+                    const d = new Uint8ClampedArray(imageData);
+                    const md = new Uint8ClampedArray(maskData);
+                    const tol = parseInt(tolerance);
+                    const distSq = ((tol / 100) * 442) ** 2;
+                    const vis = new Uint8Array(width * height);
+                    const isFill = (mode === 'fill');
+                    const [fillR, fillG, fillB] = fillColor || [0,0,0];
+
+                    for(const seed of seeds) {
+                        const sx = seed.x, sy = seed.y;
+                        const idx = (sy * width + sx) * 4;
+                        if (idx < 0 || idx >= d.length) continue;
+                        
+                        const r0 = d[idx], g0 = d[idx + 1], b0 = d[idx + 2], a0 = d[idx + 3];
+                        // For filling, we might want to fill even transparent areas if user clicked them
+                        if (!isFill && (a0 === 0 || md[idx + 3] > 0)) continue;
+                        
+                        const stack = [sx, sy];
+                        while (stack.length) {
+                            const y = stack.pop();
+                            const x = stack.pop();
+                            const i = (y * width + x) * 4;
+
+                            // Apply Action
+                            if (isFill) {
+                                // Fill color
+                                d[i] = fillR;
+                                d[i + 1] = fillG;
+                                d[i + 2] = fillB;
+                                d[i + 3] = 255; // Make opaque
+                            } else {
+                                // Erase (Magic Wand)
+                                d[i + 3] = 0;
+                            }
+
+                            const ns = [{ x: 0, y: -1 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 1, y: 0 }];
+                            for (let n of ns) {
+                                const nx = x + n.x;
+                                const ny = y + n.y;
+                                if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                    const vi = ny * width + nx;
+                                    if (vis[vi] === 0) {
+                                        const ni = vi * 4;
+                                        if (!isFill && md[ni + 3] > 0) { vis[vi] = 1; continue; } // Mask check for eraser
+                                        
+                                        // Similarity Check
+                                        const dSq = (d[ni] - r0) ** 2 + (d[ni + 1] - g0) ** 2 + (d[ni + 2] - b0) ** 2;
+                                        const alphaDiff = Math.abs(d[ni+3] - a0);
+                                        
+                                        // Standard flood fill condition
+                                        if (dSq <= distSq && alphaDiff <= (tol/100)*255) { 
+                                            vis[vi] = 1; 
+                                            stack.push(nx, ny); 
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    self.postMessage({ success: true, imageData: d.buffer }, [d.buffer]);
+                }
+            };
+        `;
+    // --- Stroke/Shadow Style Sets (JSON) ---
+    // Each set defines the color palette used in Outline (stroke) and Shadow modals.
+    const STYLE_SETS = [
+        { name: "經典", outline: ["#ffffff","#000000","#ef4444","#f59e0b","#10b981","#3b82f6","#8b5cf6","#ec4899"],
+                     shadow:  ["#000000","#111827","#334155","#ef4444","#f59e0b","#10b981","#3b82f6","#8b5cf6"] },
+        { name: "霓虹", outline: ["#ffffff","#00e5ff","#00ff85","#ffe600","#ff4dff","#ff2d55","#7c3aed","#111827"],
+                     shadow:  ["#000000","#00e5ff","#00ff85","#ffe600","#ff4dff","#ff2d55","#7c3aed","#ffffff"] },
+        { name: "粉彩", outline: ["#ffffff","#fecdd3","#fde68a","#bbf7d0","#bfdbfe","#ddd6fe","#fbcfe8","#000000"],
+                     shadow:  ["#0f172a","#fecdd3","#fde68a","#bbf7d0","#bfdbfe","#ddd6fe","#fbcfe8","#000000"] },
+        { name: "暖色", outline: ["#ffffff","#0f172a","#fb7185","#f97316","#f59e0b","#facc15","#a3e635","#22c55e"],
+                     shadow:  ["#000000","#7c2d12","#9a3412","#b45309","#a16207","#854d0e","#166534","#0f172a"] },
+        { name: "冷色", outline: ["#ffffff","#0f172a","#38bdf8","#22d3ee","#2dd4bf","#34d399","#60a5fa","#a78bfa"],
+                     shadow:  ["#000000","#0c4a6e","#155e75","#115e59","#065f46","#1e3a8a","#312e81","#0f172a"] },
+        { name: "黑白", outline: ["#ffffff","#000000","#e2e8f0","#cbd5e1","#94a3b8","#64748b","#334155","#0f172a"],
+                     shadow:  ["#000000","#0f172a","#1f2937","#334155","#475569","#64748b","#94a3b8","#ffffff"] }
+    ];
+
+
+        class StickerLab {
+            constructor() {
+                this.state = {
+                    stickers: [], 
+                    currentStickerId: null,
+                    currentTool: 'move',
+                    isDrawing: false,
+                    isPanMode: false,
+                    brushSize: 50,
+                    brushShape: 'circle', // 'circle' or 'square'
+                    tolerance: 15,
+                    scale: 1,
+                    translateX: 0, translateY: 0,
+                    history: [],
+                    // NEW: Added 'effect' for filters
+                    adjustments: { brightness: 100, contrast: 100, saturation: 100, effect: '' },
+                    crop: { isCropping: false, rect: { x: 0, y: 0, w: 0, h: 0 }, scale: 1, transX: 0, transY: 0 },
+                    lasso: { points: [], active: false },
+                    draw: { color: '#ffffff', lastX: 0, lastY: 0 },
+                    text: { currentEl: null, color: '#ffffff', strokeColor: '#000000', font: 'ZCOOL KuaiLe', stroke: 15, size: 50 },
+                    outline: { color: '#ffffff', width: 5 },
+                    frame: { color: '#000000', bgColor: 'transparent', width: 10, radius: 0, padding: 10 },
+                    styleSetIndex: 0,
+                    shadow: { color: '#000000', blur: 10, x: 5, y: 5 },
+                    lastPinchDist: 0,
+                    previewMode: 'light'
+                };
+
+                this.dom = {
+                    imageInput: document.getElementById('imageInput'),
+                    canvasContainer: document.getElementById('canvasContainer'),
+                    canvasWrapper: document.getElementById('canvasWrapper'),
+                    mainCanvas: document.getElementById('mainCanvas'),
+                    maskCanvas: document.getElementById('maskCanvas'),
+                    lassoCanvas: document.getElementById('lassoCanvas'),
+                    originalCanvasHidden: document.getElementById('originalCanvasHidden'),
+                    textLayer: document.getElementById('textLayer'),
+                    brushCursor: document.getElementById('brushCursor'),
+                    placeholder: document.getElementById('placeholder'),
+                    loading: document.getElementById('loading'),
+                    loadingText: document.getElementById('loadingText'),
+                    stickerTray: document.getElementById('stickerTray'),
+                    addStickerBtn: document.getElementById('addStickerBtn'),
+                    saveIndicator: document.getElementById('saveIndicator'),
+                    toast: document.getElementById('toast'),
+                    
+                    buttons: {
+                        undo: document.getElementById('undoBtn'),
+                        bgToggle: document.getElementById('bgToggleBtn'),
+                        crop: document.getElementById('cropBtn'),
+                        outline: document.getElementById('outlineBtn'),
+                        frame: document.getElementById('frameBtn'), 
+                        shadow: document.getElementById('shadowBtn'),
+                        text: document.getElementById('textBtn'),
+                        adjust: document.getElementById('adjustBtn'),
+                        preview: document.getElementById('previewBtn'),
+                        downloadPack: document.getElementById('downloadPackBtn'),
+                        finish: document.getElementById('finishBtn'),
+                        autoRun: document.getElementById('autoRunBtn'),
+                        lassoUndo: document.getElementById('lassoUndo'),
+                        lassoComplete: document.getElementById('lassoComplete'),
+                        cancelLoading: document.getElementById('cancelLoadingBtn'),
+                        previewToggle: document.getElementById('previewThemeToggle'),
+                        resetEditor: document.getElementById('resetEditorBtn'), 
+                        fitView: document.getElementById('fitViewBtn') 
+                    },
+                    sliders: {
+                        main: document.getElementById('mainSlider'),
+                        val: document.getElementById('sliderVal'),
+                        label: document.getElementById('sliderLabel'),
+                        label2: document.getElementById('sliderLabel2'),
+                        scale: document.getElementById('scaleSlider')
+                    },
+                    hints: { 
+                        strip: document.getElementById('hintStrip'), 
+                        text: document.getElementById('hintText'), 
+                        lasso: document.getElementById('lassoControls') 
+                    },
+                    toolSettings: document.getElementById('toolSettings'),
+                    colorSettings: document.getElementById('colorSettings'),
+                    shapeSettings: document.getElementById('shapeSettings'),
+                    brushPalette: document.getElementById('brushColorPalette'),
+                    brushColorDisplay: document.getElementById('currentBrushColorDisplay'),
+                    stickerSizeSelect: document.getElementById('stickerSizeSelect'), 
+                    modals: {
+                        crop: document.getElementById('cropModal'),
+                        text: document.getElementById('textEditorModal'),
+                        outline: document.getElementById('outlineModal'),
+                        frame: document.getElementById('frameModal'), 
+                        shadow: document.getElementById('shadowModal'), 
+                        result: document.getElementById('resultOverlay'),
+                        adjust: document.getElementById('adjustModal'),
+                        preview: document.getElementById('previewModal'),
+                        confirm: document.getElementById('confirmModal') 
+                    },
+                    crop: {
+                        canvas: document.getElementById('cropCanvas'),
+                        container: document.getElementById('cropContainer'),
+                        content: document.getElementById('cropContent'),
+                        selection: document.getElementById('cropSelection'),
+                        confirmBtn: document.getElementById('confirmCropBtn'),
+                        cancelBtn: document.getElementById('cancelCropBtn'),
+                        btnMove: document.getElementById('btnCropMove'),
+                        btnSelect: document.getElementById('btnCropSelect'),
+                        scaleSlider: document.getElementById('cropScaleSlider')
+                    },
+                    textEditor: {
+                        input: document.getElementById('textInput'),
+                        sizeSlider: document.getElementById('sizeSlider'),
+                        sizeDisplay: document.getElementById('sizeValDisplay'),
+                        strokeSlider: document.getElementById('strokeSlider'),
+                        strokeDisplay: document.getElementById('strokeValDisplay'),
+                        colorPalette: document.getElementById('colorPalette'),
+                        strokePalette: document.getElementById('strokeColorPalette'),
+                        fontContainer: document.getElementById('fontBtnContainer'),
+                        confirmBtn: document.getElementById('confirmAddTextBtn'),
+                        closeBtn: document.getElementById('closeTextEditorBtn')
+                    },
+                    outlineEditor: {
+                        palette: document.getElementById('outlineColorPalette'),
+                        styleSwitch: document.getElementById('outlineStyleSetSwitch'),
+                        widthSlider: document.getElementById('outlineWidthSlider'),
+                        valDisplay: document.getElementById('outlineValDisplay'),
+                        applyBtn: document.getElementById('applyOutlineBtn'),
+                        closeBtn: document.getElementById('closeOutlineModalBtn')
+                    },
+                    frameEditor: { 
+                        palette: document.getElementById('frameColorPalette'),
+                        bgPalette: document.getElementById('frameBgPalette'),
+                        widthSlider: document.getElementById('frameWidthSlider'),
+                        widthVal: document.getElementById('frameWidthVal'),
+                        radiusSlider: document.getElementById('frameRadiusSlider'),
+                        radiusVal: document.getElementById('frameRadiusVal'),
+                        paddingSlider: document.getElementById('framePaddingSlider'),
+                        paddingVal: document.getElementById('framePaddingVal'),
+                        speedLines: document.getElementById('frameSpeedLines'),
+                        applyBtn: document.getElementById('applyFrameBtn'),
+                        closeBtn: document.getElementById('closeFrameModalBtn')
+                    },
+                    shadowEditor: { 
+                        palette: document.getElementById('shadowColorPalette'),
+                        styleSwitch: document.getElementById('shadowStyleSetSwitch'),
+                        blurSlider: document.getElementById('shadowBlurSlider'),
+                        xSlider: document.getElementById('shadowXSlider'),
+                        ySlider: document.getElementById('shadowYSlider'),
+                        blurVal: document.getElementById('shadowBlurVal'),
+                        xVal: document.getElementById('shadowXVal'),
+                        yVal: document.getElementById('shadowYVal'),
+                        applyBtn: document.getElementById('applyShadowBtn'),
+                        closeBtn: document.getElementById('closeShadowModalBtn')
+                    },
+                    adjustEditor: {
+                        brightness: document.getElementById('brightnessSlider'),
+                        contrast: document.getElementById('contrastSlider'),
+                        saturation: document.getElementById('saturationSlider'),
+                        bVal: document.getElementById('brightnessVal'),
+                        cVal: document.getElementById('contrastVal'),
+                        sVal: document.getElementById('saturationVal'),
+                        resetBtn: document.getElementById('resetAdjustBtn'),
+                        confirmBtn: document.getElementById('confirmAdjustBtn'),
+                        closeBtn: document.getElementById('closeAdjustModalBtn')
+                    },
+                    preview: {
+                        img: document.getElementById('previewImage'),
+                        closeBtn: document.getElementById('closePreviewBtn'),
+                        container: document.getElementById('previewContainer')
+                    },
+                    result: {
+                        img: document.getElementById('resultImage'),
+                        closeBtn: document.getElementById('closeResultBtn'),
+                        downloadBtn: document.getElementById('downloadResultBtn')
+                    },
+                    confirmModal: {
+                        modal: document.getElementById('confirmModal'),
+                        msg: document.getElementById('confirmMessage'),
+                        yes: document.getElementById('confirmYesBtn'),
+                        cancel: document.getElementById('confirmCancelBtn')
+                    }
+                };
+
+                this.ctx = this.dom.mainCanvas.getContext('2d', { willReadFrequently: true });
+                this.maskCtx = this.dom.maskCanvas.getContext('2d', { willReadFrequently: true });
+                this.lassoCtx = this.dom.lassoCanvas.getContext('2d');
+                this.originalCtxHidden = this.dom.originalCanvasHidden.getContext('2d', { willReadFrequently: true });
+                this.cropCtx = this.dom.crop.canvas.getContext('2d');
+
+                this.debouncedSave = debounce(this.saveToDB, 500); 
+                this.debouncedUpdateTransform = debounce(this.updateTransformAndSave, 50); 
+                this.debouncedFilterUpdate = debounce(this.updateCanvasFilters, 50); 
+                this.init();
+            }
+
+            async init() {
+                this.initWorker();
+                this.initUI();
+                await this.loadFromDB(); 
+            }
+
+            initWorker() {
+                const blob = new Blob([workerCode], { type: 'application/javascript' });
+                this.worker = new Worker(URL.createObjectURL(blob));
+            }
+
+            // --- UI Initialization ---
+            initUI() {
+                this.dom.imageInput.onchange = (e) => this.handleImageUpload(e);
+                this.dom.addStickerBtn.onclick = () => this.dom.imageInput.click();
+                
+                
+
+                // --- Drag & Drop to add sticker (Desktop friendly) ---
+                const preventDefaults = (e) => { e.preventDefault(); e.stopPropagation(); };
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => {
+                    window.addEventListener(ev, preventDefaults, false);
+                });
+
+                // Visual hint while dragging over the canvas area
+                const cc = this.dom.canvasContainer;
+                cc.addEventListener('dragenter', () => cc.classList.add('ring-2','ring-indigo-500','ring-offset-2','ring-offset-slate-900'));
+                cc.addEventListener('dragleave', () => cc.classList.remove('ring-2','ring-indigo-500','ring-offset-2','ring-offset-slate-900'));
+                cc.addEventListener('drop', () => cc.classList.remove('ring-2','ring-indigo-500','ring-offset-2','ring-offset-slate-900'));
+
+                cc.addEventListener('drop', (e) => {
+                    const file = e.dataTransfer?.files?.[0];
+                    if (!file) return;
+                    if (!file.type || !file.type.startsWith('image/')) {
+                        this.showToast?.('請拖曳圖片檔');
+                        return;
+                    }
+                    // Reuse the existing upload flow
+                    this.handleImageUpload({ target: { files: [file] } });
+                });
+
+                // --- Keyboard shortcuts ---
+                window.addEventListener('keydown', (e) => {
+                    const tag = (document.activeElement?.tagName || '').toLowerCase();
+                    const isTyping = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
+                    if (isTyping) return;
+
+                    const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
+                    const mod = isMac ? e.metaKey : e.ctrlKey;
+
+                    if (e.key === 'Escape') {
+                        const m = this.dom?.modals;
+                        if (m?.text && !m.text.classList.contains('hidden')) m.text.classList.add('hidden');
+                        if (m?.outline && !m.outline.classList.contains('hidden')) m.outline.classList.add('hidden');
+                        if (m?.frame && !m.frame.classList.contains('hidden')) m.frame.classList.add('hidden');
+                        if (m?.shadow && !m.shadow.classList.contains('hidden')) m.shadow.classList.add('hidden');
+                        if (m?.adjust && !m.adjust.classList.contains('hidden')) m.adjust.classList.add('hidden');
+                        if (m?.preview && !m.preview.classList.contains('hidden')) m.preview.classList.add('hidden');
+                        if (m?.crop && !m.crop.classList.contains('hidden')) m.crop.classList.add('hidden');
+                        if (m?.confirm && !m.confirm.classList.contains('hidden')) m.confirm.classList.add('hidden');
+                        return;
+                    }
+
+                    // Ctrl/Cmd+Z: Undo
+                    if (mod && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+                        e.preventDefault();
+                        if (typeof this.undo === 'function') this.undo();
+                        return;
+                    }
+
+                    // Ctrl/Cmd+Shift+Z: Redo (optional, if you implement redo later)
+                    if (mod && e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+                        e.preventDefault();
+                        if (typeof this.redo === 'function') this.redo();
+                        return;
+                    }
+
+                    // Delete/Backspace: delete current sticker (if delete method exists)
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                        if (!this.state?.currentStickerId) return;
+                        if (typeof this.confirmDeleteSticker === 'function') {
+                            this.confirmDeleteSticker(this.state.currentStickerId);
+                        } else if (typeof this.deleteSticker === 'function') {
+                            this.deleteSticker(this.state.currentStickerId);
+                        }
+                    }
+                }, { passive: false });
+['btnMove', 'btnWand', 'btnBucket', 'btnDraw', 'btnEyedropper', 'btnProtect', 'btnMaskEraser', 'btnRestore', 'btnLasso'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if(el) el.onclick = () => this.setTool(el.dataset.tool);
+                });
+
+                const c = this.dom.canvasContainer;
+                c.addEventListener('mousedown', (e) => this.onPointerDown(e));
+                c.addEventListener('touchstart', (e) => this.onPointerDown(e), {passive: false});
+                window.addEventListener('mousemove', (e) => this.onPointerMove(e));
+                window.addEventListener('touchmove', (e) => this.onPointerMove(e), {passive: false});
+                window.addEventListener('mouseup', (e) => this.onPointerUp(e));
+                window.addEventListener('touchend', (e) => this.onPointerUp(e));
+                c.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
+
+                this.dom.sliders.main.oninput = (e) => {
+                    const v = parseInt(e.target.value);
+                    this.dom.sliders.val.textContent = v;
+                    if(this.state.currentTool === 'wand' || this.state.currentTool === 'bucket') this.state.tolerance = v;
+                    else this.state.brushSize = v;
+                    this.updateBrushCursor();
+                    this.debouncedSave(); 
+                };
+
+                this.dom.sliders.scale.oninput = (e) => {
+                    const v = parseFloat(e.target.value);
+                    if(this.state.currentTool === 'wand' || this.state.currentTool === 'bucket') {
+                        this.state.brushSize = parseInt(v); 
+                        this.updateBrushCursor();
+                    } else {
+                        this.state.scale = v;
+                        this.debouncedUpdateTransform(); 
+                    }
+                };
+                
+                this.dom.buttons.undo.onclick = () => this.undo();
+                document.getElementById('btnClearMask').onclick = () => { this.saveHistory(); this.maskCtx.clearRect(0,0,this.dom.mainCanvas.width, this.dom.mainCanvas.height); this.debouncedSave(); };
+                this.dom.buttons.bgToggle.onclick = () => this.toggleBg();
+                this.dom.buttons.autoRun.onclick = () => this.autoRemoveBg();
+                this.dom.buttons.finish.onclick = () => this.finishImage();
+                this.dom.buttons.downloadPack.onclick = () => this.downloadPack();
+                this.dom.buttons.previewToggle.onclick = () => this.togglePreviewTheme(); 
+                this.dom.buttons.resetEditor.onclick = () => this.resetEditor(); 
+                this.dom.buttons.fitView.onclick = () => this.fitImageToScreen(true); 
+                
+                // Help Modal Listeners
+                document.getElementById('helpBtn').onclick = () => document.getElementById('helpModal').classList.remove('hidden');
+                document.getElementById('closeHelpBtn').onclick = () => document.getElementById('helpModal').classList.add('hidden');
+
+                document.getElementById('textBtn').onclick = () => this.state.currentStickerId && this.openTextEditor();
+                document.getElementById('outlineBtn').onclick = () => this.state.currentStickerId && this.dom.modals.outline.classList.remove('hidden');
+                document.getElementById('frameBtn').onclick = () => this.state.currentStickerId && this.dom.modals.frame.classList.remove('hidden'); 
+                document.getElementById('shadowBtn').onclick = () => this.state.currentStickerId && this.dom.modals.shadow.classList.remove('hidden'); 
+                document.getElementById('adjustBtn').onclick = () => this.state.currentStickerId && this.dom.modals.adjust.classList.remove('hidden');
+                document.getElementById('previewBtn').onclick = () => this.state.currentStickerId && this.openPreviewModal();
+                document.getElementById('cropBtn').onclick = () => this.state.currentStickerId && this.startCropMode();
+
+                this.dom.buttons.lassoUndo.onclick = () => { this.state.lasso.points.pop(); this.drawLasso(); };
+                this.dom.buttons.lassoComplete.onclick = () => this.completeLasso();
+
+                this.dom.textEditor.closeBtn.onclick = () => this.dom.modals.text.classList.add('hidden');
+                this.dom.textEditor.confirmBtn.onclick = () => this.confirmAddText();
+                this.dom.outlineEditor.closeBtn.onclick = () => this.dom.modals.outline.classList.add('hidden');
+                this.dom.outlineEditor.applyBtn.onclick = () => this.applyImageOutline();
+                
+                this.dom.outlineEditor.widthSlider.oninput = (e) => {
+                    this.state.outline.width = parseInt(e.target.value);
+                    this.dom.outlineEditor.valDisplay.textContent = this.state.outline.width + 'px';
+                };
+
+                this.dom.frameEditor.closeBtn.onclick = () => this.dom.modals.frame.classList.add('hidden');
+                this.dom.frameEditor.applyBtn.onclick = () => this.applyFrame();
+                this.dom.frameEditor.widthSlider.oninput = (e) => { this.state.frame.width = parseInt(e.target.value); this.dom.frameEditor.widthVal.textContent = this.state.frame.width+'px'; };
+                this.dom.frameEditor.radiusSlider.oninput = (e) => { this.state.frame.radius = parseInt(e.target.value); this.dom.frameEditor.radiusVal.textContent = this.state.frame.radius+'px'; };
+                this.dom.frameEditor.paddingSlider.oninput = (e) => { this.state.frame.padding = parseInt(e.target.value); this.dom.frameEditor.paddingVal.textContent = this.state.frame.padding+'px'; };
+
+                this.dom.shadowEditor.closeBtn.onclick = () => this.dom.modals.shadow.classList.add('hidden');
+                this.dom.shadowEditor.applyBtn.onclick = () => this.applyShadow();
+                this.dom.shadowEditor.blurSlider.oninput = (e) => { 
+                    this.state.shadow.blur = parseInt(e.target.value); 
+                    this.dom.shadowEditor.blurVal.textContent = this.state.shadow.blur + 'px'; 
+                };
+                this.dom.shadowEditor.xSlider.oninput = (e) => { 
+                    this.state.shadow.x = parseInt(e.target.value); 
+                    this.dom.shadowEditor.xVal.textContent = this.state.shadow.x + 'px'; 
+                };
+                this.dom.shadowEditor.ySlider.oninput = (e) => { 
+                    this.state.shadow.y = parseInt(e.target.value); 
+                    this.dom.shadowEditor.yVal.textContent = this.state.shadow.y + 'px'; 
+                };
+
+                this.dom.adjustEditor.closeBtn.onclick = () => this.dom.modals.adjust.classList.add('hidden');
+                this.dom.adjustEditor.confirmBtn.onclick = () => { this.dom.modals.adjust.classList.add('hidden'); this.debouncedSave(); }; 
+                this.dom.adjustEditor.resetBtn.onclick = () => this.resetAdjustments();
+                this.dom.preview.closeBtn.onclick = () => this.dom.modals.preview.classList.add('hidden');
+                this.dom.result.closeBtn.onclick = () => this.dom.modals.result.classList.add('hidden');
+                this.dom.result.downloadBtn.onclick = () => this.downloadResult();
+                
+                ['brightness', 'contrast', 'saturation'].forEach(k => {
+                    document.getElementById(k+'Slider').oninput = (e) => {
+                        this.state.adjustments[k] = e.target.value;
+                        document.getElementById(k+'Val').textContent = e.target.value + '%';
+                        this.debouncedFilterUpdate(); 
+                    };
+                });
+
+                const crop = this.dom.modals.crop;
+                this.dom.crop.confirmBtn.onclick = () => this.confirmCrop();
+                this.dom.crop.cancelBtn.onclick = () => crop.classList.add('hidden');
+                
+                this.dom.crop.btnMove.onclick = () => this.setCropTool('move');
+                this.dom.crop.btnSelect.onclick = () => this.setCropTool('select');
+                this.dom.crop.scaleSlider.oninput = (e) => { 
+                    this.state.crop.scale = parseFloat(e.target.value); 
+                    this.updateCropTransform(); 
+                };
+                
+                this.dom.crop.container.addEventListener('mousedown', (e) => this.onCropStart(e));
+                this.dom.crop.container.addEventListener('touchstart', (e) => this.onCropStart(e), {passive: false});
+                window.addEventListener('mousemove', (e) => this.onCropMove(e));
+                window.addEventListener('touchmove', (e) => this.onCropMove(e), {passive: false});
+                window.addEventListener('mouseup', (e) => this.onCropEnd(e));
+                window.addEventListener('touchend', (e) => this.onCropEnd(e));
+                
+                this.dom.buttons.cancelLoading.onclick = () => {
+                    this.dom.loading.classList.add('hidden');
+                    this.dom.loading.classList.remove('flex');
+                };
+
+                // Shape Buttons
+                document.getElementById('btnShapeCircle').onclick = () => this.setBrushShape('circle');
+                document.getElementById('btnShapeSquare').onclick = () => this.setBrushShape('square');
+
+                this.initPalettes();
+                this.initBrushPalette();
+                // NEW: Initialize Filter Buttons
+                this.initFilters();
+            }
+
+            setBrushShape(shape) {
+                this.state.brushShape = shape;
+                
+                const btnCircle = document.getElementById('btnShapeCircle');
+                const btnSquare = document.getElementById('btnShapeSquare');
+                
+                if (shape === 'circle') {
+                    btnCircle.className = "w-7 h-7 rounded flex items-center justify-center bg-indigo-600 text-white transition hover:bg-indigo-500";
+                    btnSquare.className = "w-7 h-7 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition";
+                } else {
+                    btnSquare.className = "w-7 h-7 rounded flex items-center justify-center bg-indigo-600 text-white transition hover:bg-indigo-500";
+                    btnCircle.className = "w-7 h-7 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition";
+                }
+                this.updateBrushCursor();
+            }
+
+            // --- Filter System (NEW) ---
+            initFilters() {
+                const filters = [
+                    { name: '原圖', val: '', color: '#cbd5e1' },
+                    { name: '黑白', val: 'grayscale(100%)', color: '#475569' },
+                    { name: '復古', val: 'sepia(100%)', color: '#d97706' },
+                    { name: '負片', val: 'invert(100%)', color: '#0f172a' },
+                    { name: '冷色', val: 'hue-rotate(180deg)', color: '#3b82f6' },
+                    { name: '鮮豔', val: 'saturate(200%)', color: '#ec4899' },
+                    { name: '過曝', val: 'brightness(150%) contrast(120%)', color: '#f59e0b' }
+                ];
+
+                const container = document.getElementById('filterPalette');
+                container.innerHTML = '';
+
+                filters.forEach(f => {
+                    const btn = document.createElement('button');
+                    btn.className = `px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 border border-slate-600 transition hover:scale-105 ${f.name==='原圖'?'bg-indigo-600 text-white ring-2 ring-indigo-400': 'bg-slate-700 text-slate-300'}`;
+                    btn.textContent = f.name;
+                    if(f.name !== '原圖') btn.style.borderLeft = `4px solid ${f.color}`;
+
+                    btn.onclick = () => {
+                        Array.from(container.children).forEach(b => {
+                            b.className = 'px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 border border-slate-600 bg-slate-700 text-slate-300';
+                        });
+                        btn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 border border-slate-600 bg-indigo-600 text-white ring-2 ring-indigo-400';
+                        
+                        this.state.adjustments.effect = f.val;
+                        this.updateCanvasFilters(); 
+                        this.debouncedSave(); 
+                    };
+                    container.appendChild(btn);
+                });
+            }
+
+            // --- Canvas Filters Update (UPDATED) ---
+            updateCanvasFilters = () => { 
+                const {brightness, contrast, saturation, effect} = this.state.adjustments; 
+                const filterString = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) ${effect || ''}`;
+                this.dom.mainCanvas.style.filter = filterString; 
+            }
+
+            // --- Reset Adjustments (UPDATED) ---
+            resetAdjustments = () => { 
+                this.state.adjustments = { brightness: 100, contrast: 100, saturation: 100, effect: '' }; 
+                this.updateCanvasFilters(); 
+                
+                this.dom.adjustEditor.brightness.value = 100; this.dom.adjustEditor.bVal.textContent = '100%';
+                this.dom.adjustEditor.contrast.value = 100; this.dom.adjustEditor.cVal.textContent = '100%';
+                this.dom.adjustEditor.saturation.value = 100; this.dom.adjustEditor.sVal.textContent = '100%';
+                
+                const container = document.getElementById('filterPalette');
+                if(container && container.firstChild) container.firstChild.click(); 
+
+                this.autoSave();
+            }
+
+            // --- Smart Memory Management (UPDATED) ---
+            saveHistory = () => { 
+                const totalPixels = this.dom.mainCanvas.width * this.dom.mainCanvas.height;
+                let maxSteps = 10;
+
+                if (totalPixels > 2000000) maxSteps = 5; // > 1080p
+                if (totalPixels > 8000000) maxSteps = 3; // > 4K
+
+                if(this.state.history.length >= maxSteps) this.state.history.shift();
+                
+                this.state.history.push({
+                    main: this.ctx.getImageData(0,0,this.dom.mainCanvas.width,this.dom.mainCanvas.height),
+                    mask: this.maskCtx.getImageData(0,0,this.dom.maskCanvas.width,this.dom.maskCanvas.height)
+                });
+                this.dom.buttons.undo.disabled = false; 
+                this.dom.buttons.undo.style.opacity = '1';
+            }
+
+            // --- Smart File Naming (UPDATED) ---
+            downloadResult = () => {
+                const sizeType = document.getElementById('stickerSizeSelect').value;
+                let filename = `sticker_${Date.now()}.png`;
+
+                switch(sizeType) {
+                    case 'main': filename = 'main.png'; break;
+                    case 'tab': filename = 'tab.png'; break;
+                    case 'sticker':
+                    case 'big':
+                    case 'tall_big': filename = `01.png`; break;
+                    case 'emoji': filename = `001.png`; break;
+                }
+
+                const a = document.createElement('a'); 
+                a.download = filename; 
+                a.href = this.state.resultBlobUrl; 
+                document.body.appendChild(a); 
+                a.click(); 
+                document.body.removeChild(a);
+            }
+
+            // --- Frame Logic with Color Fix (UPDATED) ---
+            applyFrame = () => {
+                this.withLoading("正在繪製邊框...", async () => {
+                    this.saveHistory();
+                    const w = this.dom.mainCanvas.width;
+                    const h = this.dom.mainCanvas.height;
+                    let { width, radius, padding, color, bgColor } = this.state.frame;
+                    
+                    const safePadding = Math.min(padding, w/2 - 20, h/2 - 20); 
+                    const x = safePadding;
+                    const y = safePadding;
+                    const rw = w - (safePadding * 2);
+                    const rh = h - (safePadding * 2);
+
+                    const hasSpeedLines = this.dom.frameEditor.speedLines.checked;
+
+                    if (rw > 0 && rh > 0) {
+                        this.ctx.save();
+                        
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(x + radius, y);
+                        this.ctx.lineTo(x + rw - radius, y);
+                        this.ctx.quadraticCurveTo(x + rw, y, x + rw, y + radius);
+                        this.ctx.lineTo(x + rw, y + rh - radius);
+                        this.ctx.quadraticCurveTo(x + rw, y + rh, x + rw - radius, y + rh);
+                        this.ctx.lineTo(x + radius, y + rh);
+                        this.ctx.quadraticCurveTo(x, y + rh, x, y + rh - radius);
+                        this.ctx.lineTo(x, y + radius);
+                        this.ctx.quadraticCurveTo(x, y, x + radius, y);
+                        this.ctx.closePath();
+                        
+                        if (hasSpeedLines) {
+                             const slCanvas = document.createElement('canvas');
+                             slCanvas.width = w; slCanvas.height = h;
+                             const slCtx = slCanvas.getContext('2d');
+                             
+                             slCtx.fillStyle = (bgColor !== 'transparent') ? bgColor : '#ffffff';
+                             slCtx.fillRect(0,0,w,h);
+                             
+                             const cx = w/2, cy = h/2;
+                             const numLines = 150;
+                             const maxRadius = Math.hypot(w, h);
+                             // FIX: Speed lines follow border color
+                             slCtx.fillStyle = (color === '#ffffff' || color === '#fff') ? '#000000' : color; 
+                             
+                             slCtx.save();
+                             slCtx.translate(cx, cy);
+                             for(let i=0; i<numLines; i++) {
+                                 const angle = Math.random() * Math.PI * 2;
+                                 const innerRadius = Math.min(w,h) * 0.3 * (0.6 + Math.random()*0.4); 
+                                 const length = maxRadius;
+                                 const lineW = 0.5 + Math.random() * 4;
+                                 
+                                 slCtx.rotate(angle);
+                                 slCtx.beginPath();
+                                 slCtx.moveTo(innerRadius, 0);
+                                 slCtx.lineTo(length, lineW/2);
+                                 slCtx.lineTo(length, -lineW/2);
+                                 slCtx.fill();
+                                 slCtx.rotate(-angle);
+                             }
+                             slCtx.restore();
+
+                             this.ctx.save();
+                             this.ctx.clip(); 
+                             this.ctx.globalCompositeOperation = 'destination-over';
+                             this.ctx.drawImage(slCanvas, 0, 0);
+                             this.ctx.restore();
+
+                        } else if (bgColor !== 'transparent') {
+                            this.ctx.save();
+                            this.ctx.clip(); 
+                            this.ctx.globalCompositeOperation = 'destination-over';
+                            this.ctx.fillStyle = bgColor;
+                            this.ctx.fill();
+                            this.ctx.restore();
+                        }
+
+                        this.ctx.globalCompositeOperation = 'source-over';
+                        this.ctx.strokeStyle = color;
+                        this.ctx.lineWidth = width;
+                        this.ctx.lineJoin = "round";
+                        this.ctx.stroke();
+                        
+                        const maskCvs = document.createElement('canvas');
+                        maskCvs.width = w; maskCvs.height = h;
+                        const mCtx = maskCvs.getContext('2d');
+                        
+                        mCtx.beginPath();
+                        mCtx.moveTo(x + radius, y);
+                        mCtx.lineTo(x + rw - radius, y);
+                        mCtx.quadraticCurveTo(x + rw, y, x + rw, y + radius);
+                        mCtx.lineTo(x + rw, y + rh - radius);
+                        mCtx.quadraticCurveTo(x + rw, y + rh, x + rw - radius, y + rh);
+                        mCtx.lineTo(x + radius, y + rh);
+                        mCtx.quadraticCurveTo(x, y + rh, x, y + rh - radius);
+                        mCtx.lineTo(x, y + radius);
+                        mCtx.quadraticCurveTo(x, y, x + radius, y);
+                        mCtx.closePath();
+                        
+                        mCtx.fillStyle = '#fff';
+                        mCtx.fill();
+                        mCtx.lineWidth = width; 
+                        mCtx.strokeStyle = '#fff';
+                        mCtx.stroke();
+                        
+                        this.ctx.globalCompositeOperation = 'destination-in';
+                        this.ctx.drawImage(maskCvs, 0, 0);
+                        this.ctx.globalCompositeOperation = 'source-over';
+
+                        this.ctx.restore();
+                        
+                        this.dom.modals.frame.classList.add('hidden');
+                        this.autoSave();
+                    }
+                });
+            }
+
+            // --- Blob Rendering with Filters (UPDATED) ---
+            renderStickerToBlob = async (s, type) => {
+                await document.fonts.ready;
+                const cvs = document.createElement('canvas');
+                cvs.width = s.width; cvs.height = s.height;
+                const ctx = cvs.getContext('2d');
+                // Ensure effect is present
+                const adj = s.adjustments || {brightness:100,contrast:100,saturation:100, effect: ''};
+                ctx.filter = `brightness(${adj.brightness}%) contrast(${adj.contrast}%) saturate(${adj.saturation}%) ${adj.effect || ''}`;
+                const img = await this.loadImageFromBlob(s.srcBlob);
+                ctx.drawImage(img, 0, 0);
+                if (s.maskBlob) {
+                    const mask = await this.loadImageFromBlob(s.maskBlob);
+                    ctx.globalCompositeOperation = 'destination-out';
+                    ctx.drawImage(mask, 0, 0);
+                    ctx.globalCompositeOperation = 'source-over';
+                }
+                ctx.filter = 'none';
+                if(s.texts) {
+                    s.texts.forEach(t => {
+                        this.drawTextOnCanvas(ctx, t);
+                    });
+                }
+                let tW, tH;
+                if (type === 'main') { tW = 240; tH = 240; }
+                else if (type === 'sticker') { tW = 370; tH = 320; }
+                else if (type === 'tab') { tW = 96; tH = 74; }
+                else if (type === 'emoji') { tW = 180; tH = 180; } 
+                else if (type === 'big') { tW = 800; tH = 800; }
+                else if (type === 'tall_big') { tW = 396; tH = 660; }
+                else { tW = 370; tH = 320; }
+
+                const out = document.createElement('canvas');
+                out.width = tW; out.height = tH;
+                const oCtx = out.getContext('2d');
+                const scale = Math.min((tW)/cvs.width, (tH)/cvs.height); 
+                const dw = cvs.width * scale;
+                const dh = cvs.height * scale;
+                oCtx.drawImage(cvs, (tW-dw)/2, (tH-dh)/2, dw, dh);
+                return new Promise(r => out.toBlob(r, 'image/png')); 
+            }
+
+            // ... (Rest of existing methods remain same, but included here for completeness) ...
+            
+            showConfirm = (message, callback) => {
+                const modal = this.dom.modals.confirm;
+                this.dom.confirmModal.msg.textContent = message;
+                modal.classList.remove('hidden');
+
+                const cleanup = () => {
+                    this.dom.confirmModal.yes.onclick = null;
+                    this.dom.confirmModal.cancel.onclick = null;
+                    modal.classList.add('hidden');
+                };
+
+                this.dom.confirmModal.yes.onclick = () => { cleanup(); callback(true); };
+                this.dom.confirmModal.cancel.onclick = () => { cleanup(); callback(false); };
+            }
+
+            withLoading = async (text, asyncTask) => {
+                this.dom.loading.classList.remove('hidden');
+                this.dom.loading.classList.add('flex');
+                this.dom.loadingText.textContent = text || "處理中...";
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                try { await asyncTask(); } catch (error) { console.error("Task failed:", error); this.showToast("錯誤: " + error.message); } finally { this.dom.loading.classList.add('hidden'); this.dom.loading.classList.remove('flex'); }
+            }
+
+            onWheel = (e) => {
+                if (!this.state.currentStickerId) return;
+                e.preventDefault();
+                const scaleFactor = 1.05;
+                const newScale = e.deltaY < 0 ? Math.min(5, this.state.scale * scaleFactor) : Math.max(0.1, this.state.scale / scaleFactor);
+                if (newScale !== this.state.scale) {
+                    const wrapperRect = this.dom.canvasWrapper.getBoundingClientRect();
+                    const canvasX = wrapperRect.left + wrapperRect.width / 2;
+                    const canvasY = wrapperRect.top + wrapperRect.height / 2;
+                    const mouseX = e.clientX - canvasX;
+                    const mouseY = e.clientY - canvasY;
+                    this.state.translateX -= mouseX * (newScale - this.state.scale);
+                    this.state.translateY -= mouseY * (newScale - this.state.scale);
+                    this.state.scale = newScale;
+                    this.dom.sliders.scale.value = newScale;
+                    this.updateTransformAndSave();
+                }
+            }
+
+            initBrushPalette() {
+                const colors = ['#ffffff', '#000000', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#fwd336', '#78350f'];
+                const container = this.dom.brushPalette;
+                container.innerHTML = '';
+                colorsArr.forEach(c => {
+                    const btn = document.createElement('div');
+                    btn.className = `w-6 h-6 rounded-full cursor-pointer border-2 border-slate-600 hover:scale-110 transition shrink-0 ${c==='#ffffff'?'bg-white':''}`;
+                    btn.style.backgroundColor = c;
+                    btn.onclick = () => {
+                        this.state.draw.color = c;
+                        this.dom.brushColorDisplay.style.color = c;
+                        Array.from(container.children).forEach(b => b.classList.remove('ring-2', 'ring-indigo-500'));
+                        btn.classList.add('ring-2', 'ring-indigo-500');
+                    };
+                    container.appendChild(btn);
+                });
+                if(container.firstChild) container.firstChild.click();
+            }
+
+            togglePreviewTheme = () => {
+                const container = this.dom.preview.container;
+                const mode = this.state.previewMode === 'light' ? 'dark' : 'light';
+                this.state.previewMode = mode;
+                const themeMap = {
+                    light: { bg: 'chat-bg-light', bubble: 'chat-bubble-left-light', text: 'chat-text-light', meta: 'chat-meta-light' },
+                    dark: { bg: 'chat-bg-dark', bubble: 'chat-bubble-left-dark', text: 'chat-text-dark', meta: 'chat-meta-dark' }
+                };
+                const oldTheme = themeMap[mode === 'light' ? 'dark' : 'light'];
+                const newTheme = themeMap[mode];
+                container.classList.remove(oldTheme.bg); container.classList.add(newTheme.bg);
+                container.querySelectorAll('.chat-bubble').forEach(b => { b.classList.remove(oldTheme.bubble); b.classList.add(newTheme.bubble); });
+                container.querySelectorAll('.chat-name').forEach(t => { t.classList.remove(oldTheme.text); t.classList.add(newTheme.text); });
+                container.querySelectorAll('.chat-meta').forEach(t => { t.classList.remove(oldTheme.meta); t.classList.add(newTheme.meta); });
+            }
+
+            loadFromDB = async () => {
+                try {
+                    const db = await dbPromise;
+                    const tx = db.transaction(DB_STORE, 'readonly');
+                    const store = tx.objectStore(DB_STORE);
+                    const req = store.getAll();
+                    req.onsuccess = () => {
+                        if (req.result && req.result.length > 0) {
+                            this.state.stickers = req.result;
+                            this.renderTray();
+                            this.switchSticker(this.state.stickers[this.state.stickers.length - 1].id);
+                            this.showToast("已恢復上次進度");
+                        }
+                    };
+                } catch(e) { console.error("DB Load Error", e); }
+            }
+
+            saveToDB = async () => {
+                if (!this.state.currentStickerId) return;
+                this.dom.saveIndicator.classList.remove('hidden');
+                await this.saveCurrentStateToSticker();
+                const db = await dbPromise;
+                const tx = db.transaction(DB_STORE, 'readwrite');
+                const store = tx.objectStore(DB_STORE);
+                this.state.stickers.forEach(s => store.put(s));
+                tx.oncomplete = () => {
+                    this.dom.saveIndicator.classList.add('hidden');
+                    this.showToast("已自動儲存");
+                };
+            }
+
+            autoSave = () => { this.debouncedSave(); }
+
+            saveCurrentStateToSticker = async () => {
+                const s = this.state.stickers.find(x => x.id === this.state.currentStickerId);
+                if (!s) return;
+                const mainBlob = await new Promise(r => this.dom.mainCanvas.toBlob(r));
+                const maskBlob = await new Promise(r => this.dom.maskCanvas.toBlob(r));
+                const texts = Array.from(this.dom.textLayer.children).map(el => ({
+                    text: el.childNodes[0].textContent,
+                    x: parseFloat(el.style.left), y: parseFloat(el.style.top), 
+                    color: el.dataset.color, strokeColor: el.dataset.strokeColor,
+                    font: el.dataset.font, stroke: el.dataset.stroke, size: el.dataset.size
+                }));
+                s.srcBlob = mainBlob; s.maskBlob = maskBlob; s.texts = texts;
+                s.adjustments = { ...this.state.adjustments };
+                s.transform = { scale: this.state.scale, translateX: this.state.translateX, translateY: this.state.translateY }; 
+                s.lastModified = Date.now();
+                const thumbUrl = await this.generateCompositeImage(true, 64);
+                s.thumb = thumbUrl;
+                this.renderTray(); 
+            }
+
+            createNewSticker = async (file) => {
+                const img = await this.loadImage(file);
+                const max = 1500;
+                let w = img.width, h = img.height;
+                if(w>max || h>max) { if(w>h) { h*=max/w; w=max; } else { w*=max/h; h=max; } }
+                const cvs = document.createElement('canvas');
+                cvs.width = w; cvs.height = h;
+                cvs.getContext('2d').drawImage(img, 0, 0, w, h);
+                const blob = await new Promise(r => cvs.toBlob(r, 'image/png')); 
+                const id = 's_' + Date.now();
+                const newSticker = {
+                    id: id, createdAt: Date.now(), order: (this.state.stickers.reduce((m,s)=>Math.max(m,(s.order??0)),0)+1), styleSetIndex: (this.state.styleSetIndex ?? 0), originalBlob: blob, baseBlob: blob, srcBlob: blob, maskBlob: null, texts: [],
+                    adjustments: { brightness: 100, contrast: 100, saturation: 100, effect: '' }, 
+                    transform: { scale: 1, translateX: 0, translateY: 0 }, 
+                    width: w, height: h, thumb: null
+                };
+                this.state.stickers.push(newSticker);
+                await this.switchSticker(id);
+                this.autoSave();
+            }
+
+            switchSticker = async (id) => {
+                if (this.state.currentStickerId && this.state.currentStickerId !== id) { await this.saveCurrentStateToSticker(); }
+                this.state.currentStickerId = id;
+                const s = this.state.stickers.find(x => x.id === id);
+                if (!s) return;
+                // Restore per-sticker style set (outline/shadow palettes)
+                this.state.styleSetIndex = (s.styleSetIndex ?? this.state.styleSetIndex ?? 0);
+                this.updateStyleSetActiveUI();
+                this.renderOutlineShadowPalettes();
+                this.dom.loading.classList.remove('hidden'); this.dom.loading.classList.add('flex');
+                
+                const img = await this.loadImageFromBlob(s.srcBlob);
+                const { mainCanvas, maskCanvas, originalCanvasHidden, canvasWrapper, textLayer } = this.dom;
+                mainCanvas.width = s.width; mainCanvas.height = s.height;
+                maskCanvas.width = s.width; maskCanvas.height = s.height;
+                originalCanvasHidden.width = s.width; originalCanvasHidden.height = s.height;
+                document.getElementById('lassoCanvas').width = s.width; document.getElementById('lassoCanvas').height = s.height;
+                canvasWrapper.style.width = s.width + 'px'; canvasWrapper.style.height = s.height + 'px';
+
+                this.ctx.drawImage(img, 0, 0);
+                if (s.baseBlob) { const cleanImg = await this.loadImageFromBlob(s.baseBlob); this.originalCtxHidden.drawImage(cleanImg, 0, 0); } 
+                else { this.originalCtxHidden.drawImage(img, 0, 0); }
+                
+                this.maskCtx.clearRect(0,0,s.width,s.height);
+                if (s.maskBlob) { const maskImg = await this.loadImageFromBlob(s.maskBlob); this.maskCtx.drawImage(maskImg, 0, 0); }
+
+                textLayer.innerHTML = '';
+                if(s.texts) s.texts.forEach(t => this.addFloatingTextUI(t.text, t));
+
+                this.state.adjustments = s.adjustments || { brightness: 100, contrast: 100, saturation: 100, effect: '' };
+                this.state.scale = s.transform?.scale || 1;
+                this.state.translateX = s.transform?.translateX || 0;
+                this.state.translateY = s.transform?.translateY || 0;
+                
+                this.updateCanvasFilters();
+                ['brightness', 'contrast', 'saturation'].forEach(k => {
+                    document.getElementById(k+'Slider').value = this.state.adjustments[k];
+                    document.getElementById(k+'Val').textContent = this.state.adjustments[k] + '%';
+                });
+                
+                this.dom.sliders.scale.value = this.state.scale; 
+                
+                this.updateTransform();
+                this.state.history = [];
+                this.dom.placeholder.style.display = 'none';
+                Object.values(this.dom.buttons).forEach(b => { if(b && b.disabled !== undefined) b.disabled = false; });
+                this.dom.buttons.undo.disabled = true;
+                this.dom.buttons.fitView.disabled = false; 
+                this.fitImageToScreen(); 
+                this.renderTray();
+                this.dom.loading.classList.add('hidden'); this.dom.loading.classList.remove('flex');
+            }
+
+            fitImageToScreen = (resetTranslation = false) => {
+                const cw = this.dom.canvasContainer.clientWidth - 40; const ch = this.dom.canvasContainer.clientHeight - 40;
+                const s = Math.min(cw / this.dom.mainCanvas.width, ch / this.dom.mainCanvas.height);
+                const newScale = s > 1 ? 1 : (s < 0.1 ? 0.1 : s);
+                this.state.scale = newScale;
+                if (resetTranslation) {
+                    this.state.translateX = 0; 
+                    this.state.translateY = 0;
+                }
+                this.dom.sliders.scale.value = this.state.scale;
+                this.updateTransformAndSave();
+            }
+
+            renderTray = () => {
+                const container = this.dom.stickerTray; const addBtn = this.dom.addStickerBtn;
+                container.innerHTML = '';
+                this.state.stickers.forEach(s => {
+                    const div = document.createElement('div');
+                    div.className = `tray-thumb ${s.id === this.state.currentStickerId ? 'active' : ''}`;
+                    if (s.thumb) div.style.backgroundImage = `url(${s.thumb})`;
+                    div.onclick = () => this.switchSticker(s.id);
+                    const del = document.createElement('div');
+                    del.className = 'delete-btn'; del.innerHTML = '<i class="fas fa-times"></i>';
+                    const deleteHandler = (e) => { e.stopPropagation(); e.preventDefault(); this.deleteSticker(s.id); };
+                    del.addEventListener('click', deleteHandler);
+                    del.addEventListener('pointerdown', (e) => e.stopPropagation());
+                    div.appendChild(del);
+                    container.appendChild(div);
+                });
+                container.appendChild(addBtn);
+            }
+
+            deleteSticker = async (id) => {
+                this.showConfirm("確定刪除這張貼圖嗎？此操作不可復原。", async (confirmed) => {
+                    if (!confirmed) return;
+                    try {
+                        const db = await dbPromise;
+                        const tx = db.transaction(DB_STORE, 'readwrite');
+                        tx.objectStore(DB_STORE).delete(id);
+                        await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+                        this.state.stickers = this.state.stickers.filter(s => s.id !== id);
+                        if (this.state.stickers.length === 0) {
+                            this.ctx.clearRect(0, 0, this.dom.mainCanvas.width, this.dom.mainCanvas.height);
+                            location.reload(); 
+                        } else {
+                            if (id === this.state.currentStickerId) { await this.switchSticker(this.state.stickers[0].id); } else { this.renderTray(); }
+                        }
+                        this.showToast("已刪除");
+                    } catch (e) { 
+                        console.error(e); 
+                        this.showToast("刪除失敗");
+                    }
+                });
+            }
+
+            onPointerDown = (e) => {
+                if (!this.state.currentStickerId) return;
+                if (this.state.crop.isCropping) return; 
+                if (e.touches && e.touches.length === 2) {
+                    this.state.isPinching = true;
+                    this.state.lastPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                    this.state.lastPointerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                    this.state.lastPointerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                    return;
+                }
+                if (this.state.currentTool === 'lasso') {
+                    const pos = this.getCanvasCoordinates(e);
+                    if (this.state.lasso.points.length > 2) {
+                        const start = this.state.lasso.points[0];
+                        const dist = Math.hypot(pos.x - start.x, pos.y - start.y);
+                        if (dist < 20) { this.completeLasso(); return; }
+                    }
+                    this.state.lasso.points.push(pos);
+                    this.drawLasso();
+                    return;
+                }
+                if (this.state.currentTool === 'eyedropper') {
+                    const pos = this.getCanvasCoordinates(e);
+                    const p = this.ctx.getImageData(pos.x, pos.y, 1, 1).data;
+                    const hex = "#" + ("000000" + ((p[0] << 16) | (p[1] << 8) | p[2]).toString(16)).slice(-6);
+                    this.state.draw.color = hex;
+                    this.dom.brushColorDisplay.style.color = hex;
+                    this.showToast("已吸取顏色");
+                    this.setTool('draw');
+                    return;
+                }
+                this.state.isDrawing = true;
+                const pt = e.touches ? e.touches[0] : e;
+                this.state.lastPointerX = pt.clientX;
+                this.state.lastPointerY = pt.clientY;
+                if (this.state.currentTool === 'move') {
+                    this.dom.canvasContainer.style.cursor = 'grabbing';
+                } else {
+                    this.saveHistory();
+                    const pos = this.getCanvasCoordinates(e);
+                    if (this.state.currentTool === 'draw') {
+                        this.ctx.beginPath(); this.ctx.moveTo(pos.x, pos.y);
+                        this.state.draw.lastX = pos.x; this.state.draw.lastY = pos.y;
+                        this.ctx.lineCap = 'round'; this.ctx.lineJoin = 'round';
+                        this.ctx.strokeStyle = this.state.draw.color; this.ctx.lineWidth = this.state.brushSize;
+                        this.ctx.lineTo(pos.x, pos.y); this.ctx.stroke();
+                    } else if (this.state.currentTool === 'wand') {
+                        this.state.magicBrushStartColor = this.ctx.getImageData(pos.x, pos.y, 1, 1).data;
+                        this.magicBrush(pos.x, pos.y);
+                    } else if (this.state.currentTool === 'bucket') {
+                         const startColor = this.ctx.getImageData(pos.x, pos.y, 1, 1).data;
+                         const hex = this.state.draw.color;
+                         const r = parseInt(hex.slice(1, 3), 16);
+                         const g = parseInt(hex.slice(3, 5), 16);
+                         const b = parseInt(hex.slice(5, 7), 16);
+                         this.autoRemoveBg([{x: pos.x, y: pos.y}], 'fill', [r,g,b]);
+                    } else {
+                        // For brush/eraser tools, draw start point
+                        this.state.lastDrawX = pos.x;
+                        this.state.lastDrawY = pos.y;
+                        this.drawOnMask(pos.x, pos.y);
+                    }
+                }
+            }
+
+            onPointerMove = (e) => {
+                if (!this.state.currentStickerId) return;
+                if (this.state.crop.isCropping) return;
+                
+                if (this.state.isPinching && e.touches && e.touches.length === 2) {
+                    e.preventDefault();
+                    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                    const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                    const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                    const deltaScale = dist / this.state.lastPinchDist;
+                    this.state.scale = Math.min(5, Math.max(0.1, this.state.scale * deltaScale));
+                    this.state.translateX += (cx - this.state.lastPointerX);
+                    this.state.translateY += (cy - this.state.lastPointerY);
+                    this.state.lastPinchDist = dist; this.state.lastPointerX = cx; this.state.lastPointerY = cy;
+                    this.debouncedUpdateTransform(); 
+                    this.dom.sliders.scale.value = this.state.scale;
+                    return;
+                }
+                if (this.state.currentTool === 'lasso') return;
+                if (this.state.isDrawing) {
+                    const pt = e.touches ? e.touches[0] : e;
+                    if (this.state.currentTool === 'move') { 
+                        e.preventDefault();
+                        const dx = pt.clientX - this.state.lastPointerX;
+                        const dy = pt.clientY - this.state.lastPointerY;
+                        this.state.translateX += dx; this.state.translateY += dy;
+                        this.state.lastPointerX = pt.clientX; this.state.lastPointerY = pt.clientY;
+                        this.debouncedUpdateTransform(); 
+                    } else if (this.state.currentTool === 'draw') {
+                        e.preventDefault(); this.updateBrushCursorPos(e);
+                        const pos = this.getCanvasCoordinates(e);
+                        this.ctx.beginPath(); this.ctx.moveTo(this.state.draw.lastX, this.state.draw.lastY);
+                        this.ctx.lineTo(pos.x, pos.y); this.ctx.stroke();
+                        this.state.draw.lastX = pos.x; this.state.draw.lastY = pos.y;
+                    } else if (this.state.currentTool === 'bucket' || this.state.currentTool === 'eyedropper') {
+                         // No drag action
+                    } else { 
+                        e.preventDefault(); this.updateBrushCursorPos(e);
+                        const pos = this.getCanvasCoordinates(e);
+                        if (this.state.currentTool === 'wand') {
+                            this.state.hasMoved = true; this.magicBrush(pos.x, pos.y);
+                        } else { 
+                            // Interpolate mask drawing for smooth lines
+                            const dist = Math.hypot(pos.x - this.state.lastDrawX, pos.y - this.state.lastDrawY);
+                            const steps = Math.ceil(dist / (this.state.brushSize / 4)); // Draw every quarter brush size
+                            if (steps > 0) {
+                                for (let i = 0; i <= steps; i++) {
+                                    const t = i / steps;
+                                    const lx = this.state.lastDrawX + (pos.x - this.state.lastDrawX) * t;
+                                    const ly = this.state.lastDrawY + (pos.y - this.state.lastDrawY) * t;
+                                    this.drawOnMask(lx, ly);
+                                }
+                            }
+                            this.state.lastDrawX = pos.x;
+                            this.state.lastDrawY = pos.y;
+                        }
+                    }
+                } else { this.updateBrushCursorPos(e); }
+            }
+            
+            updateTransform = () => {
+                this.dom.canvasWrapper.style.transform = `translate(calc(-50% + ${this.state.translateX}px), calc(-50% + ${this.state.translateY}px)) scale(${this.state.scale})`;
+                this.updateBrushCursor();
+            }
+
+            updateTransformAndSave = () => {
+                this.updateTransform();
+                this.autoSave(); 
+            }
+
+            onPointerUp = (e) => {
+                if (this.state.crop.isCropping) return;
+                this.state.isPinching = false;
+                if (this.state.isDrawing) {
+                    this.state.isDrawing = false;
+                    this.dom.canvasContainer.style.cursor = '';
+                    if (this.state.currentTool === 'move') { 
+                        this.autoSave();
+                    } else if (this.state.currentTool === 'draw') {
+                        this.ctx.closePath(); this.autoSave();
+                    } else if (this.state.currentTool !== 'move' && this.state.currentTool !== 'lasso' && this.state.currentTool !== 'bucket' && this.state.currentTool !== 'eyedropper') {
+                        if (this.state.currentTool === 'wand' && !this.state.hasMoved) {
+                             const pos = this.getCanvasCoordinates({clientX: this.dom.brushCursor.offsetLeft, clientY: this.dom.brushCursor.offsetTop});
+                             this.autoRemoveBg([{x: pos.x, y: pos.y}]);
+                        }
+                        this.state.hasMoved = false; this.autoSave(); 
+                    }
+                    this.state.isPanMode = false; 
+                }
+            }
+
+            drawLasso = () => {
+                const pts = this.state.lasso.points;
+                const ctx = this.lassoCtx;
+                ctx.clearRect(0, 0, this.dom.lassoCanvas.width, this.dom.lassoCanvas.height);
+                if (pts.length === 0) return;
+                ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+                for(let i=1; i<pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.setLineDash([5,5]); ctx.stroke();
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.setLineDash([]); ctx.stroke();
+                ctx.fillStyle = '#6366f1';
+                pts.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill(); });
+            }
+
+            completeLasso = () => {
+                const pts = this.state.lasso.points;
+                if (pts.length < 3) return;
+                this.saveHistory();
+                
+                // Use main context to erase directly (standard lasso behavior)
+                this.ctx.beginPath(); this.ctx.moveTo(pts[0].x, pts[0].y);
+                for(let i=1; i<pts.length; i++) this.ctx.lineTo(pts[i].x, pts[i].y);
+                this.ctx.closePath();
+                
+                this.ctx.save();
+                this.ctx.globalCompositeOperation = 'destination-out';
+                this.ctx.fill();
+                this.ctx.restore();
+
+                this.state.lasso.points = [];
+                this.lassoCtx.clearRect(0, 0, this.dom.lassoCanvas.width, this.dom.lassoCanvas.height);
+                this.autoSave();
+            }
+
+            setTool = (tool) => {
+                this.state.currentTool = tool;
+                document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('tool-active'));
+                const btn = document.querySelector(`[data-tool="${tool}"]`);
+                if(btn) btn.classList.add('tool-active');
+                
+                const hintLasso = this.dom.hints.lasso;
+                const hintText = this.dom.hints.text;
+                const cursor = this.dom.brushCursor;
+                const clearBtn = document.getElementById('btnClearMask');
+                const toolSettings = this.dom.toolSettings;
+                const colorSettings = this.dom.colorSettings;
+                const shapeSettings = this.dom.shapeSettings;
+
+                hintLasso.classList.add('hidden');
+                toolSettings.classList.add('hidden');
+                cursor.style.display = 'none';
+                clearBtn.classList.add('hidden');
+                this.dom.canvasContainer.style.cursor = 'default';
+
+                const sl = this.dom.sliders.label.parentElement;
+                
+                if (tool === 'move') {
+                    sl.style.visibility = 'hidden';
+                    this.dom.sliders.label2.innerHTML = '<span>縮小</span><span><i class="fas fa-search"></i> 縮放</span><span>放大</span>';
+                    this.dom.sliders.scale.min = 0.1; this.dom.sliders.scale.max = 5.0; this.dom.sliders.scale.value = this.state.scale;
+                    hintText.innerHTML = '✋ 移動模式：拖曳可平移畫面，滑桿控制縮放';
+                    this.dom.canvasContainer.style.cursor = 'grab';
+                } else if (tool === 'wand' || tool === 'bucket') {
+                    sl.style.visibility = 'visible';
+                    this.dom.sliders.label.innerHTML = '<span>精細</span><span class="bg-slate-800 px-1.5 rounded text-indigo-400 border border-slate-700">'+this.state.tolerance+'</span><span>寬鬆</span>';
+                    this.dom.sliders.main.min = 1; this.dom.sliders.main.max = 100; this.dom.sliders.main.value = this.state.tolerance;
+                    this.dom.sliders.label2.innerHTML = '<span>細</span><span class="bg-slate-800 px-1.5 rounded text-indigo-400 border border-slate-700">筆刷</span><span>粗</span>';
+                    this.dom.sliders.scale.min = 5; this.dom.sliders.scale.max = 150; this.dom.sliders.scale.value = this.state.brushSize;
+                    
+                    if (tool === 'bucket') {
+                        hintText.innerHTML = '🪣 點擊區域進行填色。';
+                        toolSettings.classList.remove('hidden');
+                        colorSettings.style.display = 'flex';
+                        shapeSettings.style.display = 'none'; // Bucket doesn't have shape
+                    } else {
+                        hintText.innerHTML = '🪄 魔術棒 (點擊或拖曳去背)。';
+                        // Wand doesn't need color or shape really
+                    }
+                    cursor.style.display = 'block';
+                    this.dom.canvasContainer.style.cursor = 'none';
+                    this.updateBrushCursor();
+
+                } else if (tool === 'draw') {
+                    sl.style.visibility = 'visible';
+                    this.dom.sliders.label.innerHTML = '<span>細筆</span><span class="bg-slate-800 px-1.5 rounded text-indigo-400 border border-slate-700">'+this.state.brushSize+'</span><span>粗筆</span>';
+                    this.dom.sliders.main.min = 1; this.dom.sliders.main.max = 50; this.dom.sliders.main.value = this.state.brushSize;
+                    this.dom.sliders.label2.innerHTML = '<span>縮小</span><span><i class="fas fa-search"></i> 縮放</span><span>放大</span>';
+                    this.dom.sliders.scale.min = 0.1; this.dom.sliders.scale.max = 5.0; this.dom.sliders.scale.value = this.state.scale;
+                    
+                    hintText.innerHTML = '🎨 盡情揮灑創意。';
+                    toolSettings.classList.remove('hidden');
+                    colorSettings.style.display = 'flex';
+                    shapeSettings.style.display = 'none'; // Draw tool usually round, keeping simple for now
+                    
+                    cursor.style.display = 'block';
+                    this.dom.canvasContainer.style.cursor = 'none';
+                    this.updateBrushCursor();
+                } else if (tool === 'eyedropper') {
+                      sl.style.visibility = 'hidden';
+                      hintText.innerHTML = '🖊️ 點擊畫面吸取顏色。';
+                      this.dom.canvasContainer.style.cursor = 'crosshair';
+                } else if (tool === 'lasso') {
+                    hintText.innerHTML = '✂️ 點擊畫面建立選區 (雙擊起點閉合)。';
+                    hintLasso.classList.remove('hidden');
+                    this.dom.canvasContainer.style.cursor = 'crosshair';
+                } else {
+                    // Protect / Eraser / Restore
+                    sl.style.visibility = 'visible';
+                    this.dom.sliders.label.innerHTML = '<span>細筆刷</span><span class="bg-slate-800 px-1.5 rounded text-slate-400 border border-slate-700">'+this.state.brushSize+'</span><span>粗筆刷</span>';
+                    this.dom.sliders.main.min = 5; this.dom.sliders.main.max = 300; this.dom.sliders.main.value = this.state.brushSize;
+                    this.dom.sliders.label2.innerHTML = '<span>縮小</span><span><i class="fas fa-search"></i> 縮放</span><span>放大</span>';
+                    this.dom.sliders.scale.min = 0.1; this.dom.sliders.scale.max = 5.0; this.dom.sliders.scale.value = this.state.scale;
+                    
+                    toolSettings.classList.remove('hidden');
+                    colorSettings.style.display = 'none';
+                    shapeSettings.style.display = 'flex';
+
+                    cursor.style.display = 'block';
+                    this.dom.canvasContainer.style.cursor = 'none';
+                    hintText.innerHTML = '🖌️ 塗抹模式 (可選擇圓形或方形筆刷)。';
+                    if (tool === 'protect') clearBtn.classList.remove('hidden');
+                    this.updateBrushCursor();
+                }
+            }
+
+            updateCropTransform = () => {
+                this.dom.crop.content.style.transform = `translate(calc(-50% + ${this.state.crop.transX}px), calc(-50% + ${this.state.crop.transY}px)) scale(${this.state.crop.scale})`;
+            }
+
+            getCropPointerCoords = (e) => {
+                const rect = this.dom.crop.content.getBoundingClientRect();
+                let cx, cy;
+                if(e.touches && e.touches.length > 0) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; } 
+                else { cx = e.clientX; cy = e.clientY; }
+                const scaleX = this.dom.crop.canvas.width / rect.width;
+                const scaleY = this.dom.crop.canvas.height / rect.height;
+                return { x: (cx - rect.left) * scaleX, y: (cy - rect.top) * scaleY };
+            }
+
+            onCropStart = (e) => {
+                e.preventDefault();
+                if(this.state.crop.tool === 'move') {
+                    this.state.crop.isCropping = true;
+                    const evt = e.touches ? e.touches[0] : e;
+                    this.state.crop.lastPtrX = evt.clientX;
+                    this.state.crop.lastPtrY = evt.clientY;
+                    this.dom.crop.container.style.cursor = "grabbing";
+                } else {
+                    this.state.crop.isCropping = true;
+                    const c = this.getCropPointerCoords(e);
+                    this.state.crop.startX = c.x;
+                    this.state.crop.startY = c.y;
+                    this.state.crop.rect = { x: c.x, y: c.y, w: 0, h: 0 };
+                    this.updateCropUI();
+                    this.dom.crop.selection.style.display = 'block';
+                }
+            }
+
+            onCropMove = (e) => {
+                if(!this.state.crop.isCropping) return;
+                e.preventDefault();
+                if(this.state.crop.tool === 'move') {
+                    const evt = e.touches ? e.touches[0] : e;
+                    const dx = evt.clientX - this.state.crop.lastPtrX;
+                    const dy = evt.clientY - this.state.crop.lastPtrY;
+                    this.state.crop.lastPtrX = evt.clientX;
+                    this.state.crop.lastPtrY = evt.clientY;
+                    this.state.crop.transX += dx;
+                    this.state.crop.transY += dy;
+                    this.updateCropTransform();
+                } else {
+                    const c = this.getCropPointerCoords(e);
+                    let x = Math.min(this.state.crop.startX, c.x);
+                    let y = Math.min(this.state.crop.startY, c.y);
+                    let w = Math.abs(c.x - this.state.crop.startX);
+                    let h = Math.abs(c.y - this.state.crop.startY);
+                    x = Math.max(0, x); y = Math.max(0, y);
+                    w = Math.min(w, this.dom.crop.canvas.width - x);
+                    h = Math.min(h, this.dom.crop.canvas.height - y);
+                    this.state.crop.rect = { x, y, w, h };
+                    this.updateCropUI();
+                }
+            }
+
+            updateCropUI = () => {
+                const r = this.state.crop.rect;
+                this.dom.crop.selection.style.left = r.x + 'px';
+                this.dom.crop.selection.style.top = r.y + 'px';
+                this.dom.crop.selection.style.width = r.w + 'px';
+                this.dom.crop.selection.style.height = r.h + 'px';
+            }
+
+            onCropEnd = () => {
+                if(this.state.crop.isCropping) {
+                    this.state.crop.isCropping = false;
+                    if(this.state.crop.tool === 'move') {
+                        this.dom.crop.container.style.cursor = "grab";
+                    } else {
+                        if(this.state.crop.rect.w > 5 && this.state.crop.rect.h > 5) {
+                            this.dom.crop.confirmBtn.disabled = false;
+                        } else {
+                            this.dom.crop.selection.style.display = 'none';
+                            this.dom.crop.confirmBtn.disabled = true;
+                        }
+                    }
+                }
+            }
+
+            startCropMode = async () => {
+                const s = this.state.stickers.find(x => x.id === this.state.currentStickerId);
+                if (!s) return;
+                const sourceBlob = s.originalBlob || s.srcBlob;
+                const img = await this.loadImageFromBlob(sourceBlob);
+                this.state.crop.img = img; 
+                this.dom.modals.crop.classList.remove('hidden');
+                this.dom.crop.canvas.width = img.width;
+                this.dom.crop.canvas.height = img.height;
+                this.cropCtx.clearRect(0, 0, img.width, img.height);
+                this.cropCtx.drawImage(img, 0, 0);
+                Object.assign(this.state.crop, { scale: 1, transX: 0, transY: 0, rect: {x:0, y:0, w:0, h:0}, isCropping: false });
+                this.dom.crop.scaleSlider.value = 1;
+                this.setCropTool('move');
+                const cw = this.dom.crop.container.clientWidth - 40;
+                const ch = this.dom.crop.container.clientHeight - 40;
+                let sc = Math.min(cw / img.width, ch / img.height);
+                sc = sc > 1 ? 1 : (sc < 0.1 ? 0.1 : sc);
+                this.state.crop.scale = sc;
+                this.dom.crop.scaleSlider.value = sc;
+                this.updateCropTransform();
+                this.dom.crop.selection.style.display = 'none';
+                this.dom.crop.confirmBtn.disabled = true;
+            }
+
+            setCropTool = (tool) => {
+                this.state.crop.tool = tool;
+                if(tool === 'move') {
+                    this.dom.crop.btnMove.className = "bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1";
+                    this.dom.crop.btnSelect.className = "bg-slate-700 text-slate-300 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1";
+                    this.dom.crop.container.style.cursor = "grab";
+                    this.state.crop.isCropping = false;
+                    this.dom.crop.selection.style.display = 'none';
+                    this.dom.crop.confirmBtn.disabled = true;
+                } else {
+                    this.dom.crop.btnMove.className = "bg-slate-700 text-slate-300 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1";
+                    this.dom.crop.btnSelect.className = "bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1";
+                    this.dom.crop.container.style.cursor = "crosshair";
+                }
+            }
+
+            confirmCrop = () => {
+                this.withLoading("正在裁切...", async () => {
+                    const r = this.state.crop.rect;
+                    const s = this.state.stickers.find(x => x.id === this.state.currentStickerId);
+                    if (!s || !this.state.crop.img) return;
+                    const t = document.createElement('canvas');
+                    t.width = r.w; t.height = r.h;
+                    t.getContext('2d').drawImage(this.state.crop.img, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+                    const blob = await new Promise(r => t.toBlob(r, 'image/png'));
+                    s.srcBlob = blob; s.baseBlob = blob;
+                    s.width = r.w; s.height = r.h; s.maskBlob = null; 
+                    s.texts = []; 
+                    s.transform = { scale: 1, translateX: 0, translateY: 0 }; 
+                    this.dom.modals.crop.classList.add('hidden');
+                    await this.switchSticker(s.id);
+                    this.autoSave();
+                });
+            }
+
+            downloadPack = async () => {
+                if (this.state.stickers.length === 0) return;
+                this.withLoading("打包中...", async () => {
+                    const zip = new JSZip();
+                    const mainFolder = zip.folder("main_images");
+                    const stickerFolder = zip.folder("stickers");
+                    const tabFolder = zip.folder("tab_images");
+                    await this.saveCurrentStateToSticker();
+                    for (let i = 0; i < this.state.stickers.length; i++) {
+                        const s = this.state.stickers[i];
+                        if (i === 0) {
+                            const mainBlob = await this.renderStickerToBlob(s, 'main');
+                            mainFolder.file(`main.png`, mainBlob);
+                        }
+                        const stickerBlob = await this.renderStickerToBlob(s, 'sticker');
+                        stickerFolder.file(`sticker_${i+1}.png`, stickerBlob);
+                        const tabBlob = await this.renderStickerToBlob(s, 'tab');
+                        tabFolder.file(`tab_${i+1}.png`, tabBlob);
+                    }
+                    const content = await zip.generateAsync({type:"blob"});
+                    saveAs(content, "sticker_pack.zip");
+                });
+            }
+
+            drawTextOnCanvas = (ctx, t) => {
+                let font = t.font || 'Noto Sans TC';
+                let weight = font === 'Font Awesome 6 Free' ? '900' : '900';
+                ctx.font = `${weight} ${t.size}px "${font}", sans-serif`;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+                ctx.lineWidth = t.size * (t.stroke/100) * 2;
+                ctx.strokeStyle = t.strokeColor;
+                ctx.strokeText(t.text, t.x, t.y);
+                ctx.fillStyle = t.color;
+                ctx.fillText(t.text, t.x, t.y);
+            }
+
+            loadImage = (file) => { return new Promise((r) => { const reader = new FileReader(); reader.onload = (e) => this.loadImageFromSrc(e.target.result).then(r); reader.readAsDataURL(file); }); }
+            loadImageFromSrc = (src) => { return new Promise((r) => { const img = new Image(); img.onload = () => r(img); img.src = src; }); }
+            loadImageFromBlob = (blob) => { return new Promise(r => { const img = new Image(); img.onload = () => r(img); img.src = URL.createObjectURL(blob); }); }
+            
+            showToast = (msg) => {
+                this.dom.toast.textContent = msg;
+                this.dom.toast.classList.add('toast-active');
+                setTimeout(() => this.dom.toast.classList.remove('toast-active'), 2000);
+            }
+
+            getCanvasCoordinates = (e) => {
+                const r = this.dom.mainCanvas.getBoundingClientRect();
+                let cx, cy;
+                if (e.touches && e.touches.length > 0) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; } 
+                else { cx = e.clientX || e.x; cy = e.clientY || e.y; }
+                const x = (cx - r.left) * (this.dom.mainCanvas.width / r.width);
+                const y = (cy - r.top) * (this.dom.mainCanvas.height / r.height);
+                return { x: Math.floor(x), y: Math.floor(y) };
+            }
+
+            updateBrushCursorPos = (e) => {
+                if(this.state.currentTool === 'move' || this.state.currentTool === 'lasso' || this.state.currentTool === 'eyedropper') {
+                    this.dom.brushCursor.style.display = 'none';
+                    return;
+                }
+                let cx, cy;
+                if (e.touches && e.touches.length > 0) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; }
+                else { cx = e.clientX; cy = e.clientY; }
+                this.dom.brushCursor.style.display = 'block';
+                this.dom.brushCursor.style.left = cx + 'px';
+                this.dom.brushCursor.style.top = cy + 'px';
+            }
+
+            drawOnMask = (x, y) => {
+                const { brushSize, currentTool, brushShape } = this.state;
+                const r = brushSize / 2;
+                
+                if (currentTool === 'restore') {
+                    this.ctx.save(); this.ctx.beginPath(); 
+                    if (brushShape === 'square') {
+                        this.ctx.rect(x - r, y - r, brushSize, brushSize);
+                    } else {
+                        this.ctx.arc(x, y, r, 0, Math.PI * 2); 
+                    }
+                    this.ctx.clip();
+                    const sx = x-r-1, sy = y-r-1, sw = brushSize+2, sh = brushSize+2;
+                    this.ctx.drawImage(this.dom.originalCanvasHidden, sx, sy, sw, sh, sx, sy, sw, sh);
+                    this.ctx.restore();
+                } else {
+                    this.maskCtx.beginPath(); 
+                    if (brushShape === 'square') {
+                        this.maskCtx.rect(x - r, y - r, brushSize, brushSize);
+                    } else {
+                        this.maskCtx.arc(x, y, r, 0, Math.PI * 2);
+                    }
+                    
+                    if (currentTool === 'protect') { 
+                        this.maskCtx.fillStyle = '#ff0000'; 
+                        this.maskCtx.fill(); 
+                    } else { 
+                        this.maskCtx.globalCompositeOperation = 'destination-out'; 
+                        this.maskCtx.fill(); 
+                        this.maskCtx.globalCompositeOperation = 'source-over'; 
+                    }
+                }
+            }
+
+            magicBrush = (cx, cy) => {
+                if (!this.state.magicBrushStartColor) return;
+                const r = this.state.brushSize / 2;
+                const x = Math.max(0, Math.floor(cx - r));
+                const y = Math.max(0, Math.floor(cy - r));
+                const w = Math.min(this.dom.mainCanvas.width - x, Math.ceil(r * 2));
+                const h = Math.min(this.dom.mainCanvas.height - y, Math.ceil(r * 2));
+                if (w <= 0 || h <= 0) return;
+                const imgData = this.ctx.getImageData(x, y, w, h);
+                const d = imgData.data;
+                const target = this.state.magicBrushStartColor;
+                const tolSq = (this.state.tolerance * 4.42) ** 2;
+                const rSq = r * r;
+                for (let i = 0; i < d.length; i += 4) {
+                    const px = (i / 4) % w; const py = Math.floor((i / 4) / w);
+                    const dx = px - r; const dy = py - r;
+                    if (dx * dx + dy * dy > rSq) continue;
+                    if (d[i + 3] === 0) continue;
+                    const dist = (d[i] - target[0]) ** 2 + (d[i + 1] - target[1]) ** 2 + (d[i + 2] - target[2]) ** 2;
+                    if (dist <= tolSq) { d[i + 3] = 0; }
+                }
+                this.ctx.putImageData(imgData, x, y);
+            }
+
+            autoRemoveBg = (specificSeeds = null, mode = 'remove', fillColor = null) => {
+                if(!this.state.currentStickerId) return;
+                this.withLoading("智慧計算中...", async () => {
+                    this.saveHistory();
+                    const w = this.dom.mainCanvas.width;
+                    const h = this.dom.mainCanvas.height;
+                    const imageData = this.ctx.getImageData(0, 0, w, h);
+                    const maskData = this.maskCtx.getImageData(0, 0, w, h);
+                    const seeds = specificSeeds || [
+                        {x:0,y:0}, {x:w-1,y:0}, {x:0,y:h-1}, {x:w-1,y:h-1},
+                        {x:Math.floor(w/2),y:0}, {x:Math.floor(w/2),y:h-1},
+                        {x:0,y:Math.floor(h/2)}, {x:w-1,y:Math.floor(h/2)}
+                    ];
+                    return new Promise((resolve, reject) => {
+                        this.worker.onmessage = (e) => {
+                            if(e.data.success) {
+                                const processedData = new ImageData(new Uint8ClampedArray(e.data.imageData), w, h);
+                                this.ctx.putImageData(processedData, 0, 0);
+                                this.autoSave();
+                                resolve();
+                            } else { reject(new Error("Worker failed")); }
+                        };
+                        this.worker.onerror = (e) => reject(e);
+                        this.worker.postMessage({
+                            type: 'floodFill', imageData: imageData.data.buffer, maskData: maskData.data.buffer, seeds: seeds, tolerance: this.state.tolerance, width: w, height: h, mode: mode, fillColor: fillColor
+                        }, [imageData.data.buffer, maskData.data.buffer]);
+                    });
+                });
+            }
+
+            resetEditor = async () => {
+                this.showConfirm("確定要重置此貼圖嗎？將還原至原始圖片並清除所有編輯。", async (confirmed) => {
+                    if (!confirmed) return;
+                    const s = this.state.stickers.find(x => x.id === this.state.currentStickerId);
+                    if (s) {
+                        s.maskBlob = null;
+                        s.texts = [];
+                        s.adjustments = { brightness: 100, contrast: 100, saturation: 100, effect: '' };
+                        s.transform = { scale: 1, translateX: 0, translateY: 0 };
+                        
+                        const blob = await new Promise(r => this.dom.originalCanvasHidden.toBlob(r, 'image/png'));
+                        s.srcBlob = blob;
+
+                        await this.switchSticker(s.id);
+                        this.autoSave();
+                    }
+                });
+            }
+
+            toggleBg = () => { 
+                const c = this.dom.canvasContainer; 
+                if (c.classList.contains('bg-checker')) {
+                    c.classList.remove('bg-checker');
+                    c.style.backgroundColor = '#000';
+                } else {
+                    c.classList.add('bg-checker');
+                    c.style.backgroundColor = '';
+                }
+            }
+
+            handleImageUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    this.createNewSticker(file);
+                    e.target.value = '';
+                }
+            }
+
+            undo = () => {
+                if(this.state.history.length>0) {
+                    const s = this.state.history.pop();
+                    this.ctx.putImageData(s.main,0,0); this.maskCtx.putImageData(s.mask,0,0);
+                    if(this.state.history.length===0) { this.dom.buttons.undo.disabled=true; this.dom.buttons.undo.style.opacity='0.3'; }
+                    this.autoSave();
+                }
+            }
+
+            // --- Style Set System (Outline/Shadow) ---
+            buildColorPalette(container, colorsArr, onSelect, initial) {
+                container.innerHTML = '';
+                colorsArr.forEach(c => {
+                    const btn = document.createElement('div');
+                    btn.className = `w-8 h-8 rounded-full cursor-pointer border-2 border-slate-600 shadow-md transition transform hover:scale-110 shrink-0 ${c==='#ffffff'?'bg-white':''}`;
+                    btn.style.backgroundColor = c;
+                    btn.onclick = () => {
+                        onSelect(c);
+                        Array.from(container.children).forEach(b => b.classList.remove('ring-2','ring-indigo-500','scale-110'));
+                        btn.classList.add('ring-2','ring-indigo-500','scale-110');
+                    };
+                    container.appendChild(btn);
+                    if (c === initial) btn.click();
+                });
+            }
+
+            renderStyleSetSwitches = () => {
+                const makeBtn = (idx) => {
+                    const s = STYLE_SETS[idx];
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-600 text-slate-200 hover:bg-slate-700 transition';
+                    b.textContent = `${idx+1} ${s.name}`;
+                    b.onclick = () => this.applyStyleSet(idx, true);
+                    return b;
+                };
+
+                const outlineBox = this.dom.outlineEditor.styleSwitch;
+                const shadowBox = this.dom.shadowEditor.styleSwitch;
+                if (outlineBox) {
+                    outlineBox.innerHTML = '';
+                    STYLE_SETS.forEach((_, i) => outlineBox.appendChild(makeBtn(i)));
+                }
+                if (shadowBox) {
+                    shadowBox.innerHTML = '';
+                    STYLE_SETS.forEach((_, i) => shadowBox.appendChild(makeBtn(i)));
+                }
+                this.updateStyleSetActiveUI();
+            }
+
+            updateStyleSetActiveUI = () => {
+                const idx = this.state.styleSetIndex ?? 0;
+                const mark = (box) => {
+                    if (!box) return;
+                    Array.from(box.children).forEach((el, i) => {
+                        el.classList.remove('bg-indigo-600','border-indigo-400');
+                        if (i === idx) el.classList.add('bg-indigo-600','border-indigo-400');
+                    });
+                };
+                mark(this.dom.outlineEditor.styleSwitch);
+                mark(this.dom.shadowEditor.styleSwitch);
+            }
+
+            applyStyleSet = (idx, persistToSticker = true) => {
+                const safeIdx = Math.max(0, Math.min(STYLE_SETS.length - 1, idx));
+                this.state.styleSetIndex = safeIdx;
+
+                const set = STYLE_SETS[safeIdx];
+                // Optional: auto-apply the default colors of the set
+                this.state.outline.color = set.outline[0];
+                this.state.shadow.color = set.shadow[0];
+
+                if (persistToSticker && this.state.currentStickerId) {
+                    const s = this.state.stickers.find(x => x.id === this.state.currentStickerId);
+                    if (s) s.styleSetIndex = safeIdx;
+                    this.autoSave();
+                }
+
+                this.renderOutlineShadowPalettes();
+                this.updateStyleSetActiveUI();
+            }
+
+            renderOutlineShadowPalettes = () => {
+                const idx = this.state.styleSetIndex ?? 0;
+                const set = STYLE_SETS[idx] || STYLE_SETS[0];
+
+                // Keep current colors if possible; otherwise fallback to first color
+                const oInit = set.outline.includes(this.state.outline.color) ? this.state.outline.color : set.outline[0];
+                const sInit = set.shadow.includes(this.state.shadow.color) ? this.state.shadow.color : set.shadow[0];
+
+                this.buildColorPalette(this.dom.outlineEditor.palette, set.outline, (c)=> this.state.outline.color = c, oInit);
+                this.buildColorPalette(this.dom.shadowEditor.palette, set.shadow, (c)=> this.state.shadow.color = c, sInit);
+            }
+
+            initPalettes() {
+                const colors = ['#ffffff', '#000000', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'];
+                const bgColors = ['transparent', '#ffffff', '#fefce8', '#f0f9ff', '#fce7f3', '#000000']; 
+                
+                const createPalette = (container, colorsArr, onSelect, initial) => {
+                    container.innerHTML = '';
+                    colors.forEach(c => {
+                        const btn = document.createElement('div');
+                        btn.className = `w-8 h-8 rounded-full cursor-pointer border-2 border-slate-200 transition transform hover:scale-110 shrink-0 ${c==='#ffffff'?'bg-white':''}`;
+                        btn.style.backgroundColor = c;
+                        btn.onclick = () => {
+                            onSelect(c);
+                            Array.from(container.children).forEach(b => b.classList.remove('ring-2', 'ring-indigo-500', 'scale-110'));
+                            btn.classList.add('ring-2', 'ring-indigo-500', 'scale-110');
+                        };
+                        container.appendChild(btn);
+                        if(c === initial) btn.click();
+                    });
+                };
+
+                const createBgPalette = (container, onSelect, initial) => {
+                    container.innerHTML = '';
+                    bgColors.forEach(c => {
+                        const btn = document.createElement('div');
+                        btn.className = `w-8 h-8 rounded-full cursor-pointer border-2 border-slate-600 transition transform hover:scale-110 shrink-0 relative overflow-hidden`;
+                        
+                        if(c === 'transparent') {
+                            btn.style.background = `repeating-linear-gradient(45deg, #ccc 0, #ccc 5px, #fff 5px, #fff 10px)`;
+                            btn.title = "透明";
+                        } else {
+                            btn.style.backgroundColor = c;
+                        }
+
+                        btn.onclick = () => {
+                            onSelect(c);
+                            Array.from(container.children).forEach(b => b.classList.remove('ring-2', 'ring-indigo-500', 'scale-110'));
+                            btn.classList.add('ring-2', 'ring-indigo-500', 'scale-110');
+                        };
+                        container.appendChild(btn);
+                        if(c === initial) btn.classList.add('ring-2', 'ring-indigo-500', 'scale-110');
+                    });
+                };
+
+                createPalette(this.dom.textEditor.colorPalette, colors, (c) => this.state.text.color = c, '#ffffff');
+                createPalette(this.dom.textEditor.strokePalette, colors, (c) => this.state.text.strokeColor = c, '#000000');
+                // outline palette will be rendered by style set
+
+                createPalette(this.dom.frameEditor.palette, colors, (c) => this.state.frame.color = c, '#000000');
+                createBgPalette(this.dom.frameEditor.bgPalette, (c) => this.state.frame.bgColor = c, 'transparent');
+                // shadow palette will be rendered by style set
+
+                // Build style-set switches + render outline/shadow palettes
+                this.renderStyleSetSwitches();
+                this.renderOutlineShadowPalettes();
+            }
+
+            addFloatingTextUI = (text, props=null) => {
+                const div = document.createElement('div');
+                div.className = 'floating-text';
+                const textNode = document.createTextNode(text);
+                div.appendChild(textNode);
+
+                const { x, y } = props || { x: this.dom.mainCanvas.width/2, y: this.dom.mainCanvas.height/2 };
+                div.style.left = x + 'px'; div.style.top = y + 'px';
+                
+                const s = props || this.state.text;
+                this.applyTextStylesToElement(div, s);
+                
+                const delBtn = document.createElement('div');
+                delBtn.className = 'delete-btn'; delBtn.innerHTML = '<i class="fas fa-times"></i>';
+                delBtn.onclick = (e) => { e.stopPropagation(); div.remove(); this.autoSave(); };
+                div.appendChild(delBtn);
+                
+                let isDrag = false;
+                div.addEventListener('click', (e) => { if(!isDrag && e.target !== delBtn && e.target.closest('.delete-btn') !== delBtn) this.editExistingText(div); });
+                this.makeTextDraggable(div, () => isDrag = true, () => { isDrag=false; this.autoSave(); });
+                this.dom.textLayer.appendChild(div);
+            }
+
+            confirmAddText = () => {
+                const txt = document.getElementById('textInput').value;
+                if(this.state.text.currentEl) {
+                    this.state.text.currentEl.childNodes[0].textContent = txt;
+                    this.applyTextStylesToElement(this.state.text.currentEl, this.state.text);
+                } else {
+                    this.addFloatingTextUI(txt, this.state.text);
+                }
+                this.dom.modals.text.classList.add('hidden');
+                this.autoSave();
+            }
+
+            applyTextStylesToElement = (el, s) => {
+                el.style.color = s.color;
+                el.style.fontFamily = `"${s.font}", sans-serif`;
+                el.style.fontSize = s.size + 'px';
+                if(s.font === 'Font Awesome 6 Free') el.style.fontWeight = '900';
+                
+                el.dataset.color = s.color; el.dataset.strokeColor = s.strokeColor;
+                el.dataset.font = s.font; el.dataset.stroke = s.stroke; el.dataset.size = s.size;
+                
+                const strokePx = Math.max(1, s.size * (s.stroke / 100));
+                el.style.webkitTextStroke = `${strokePx}px ${s.strokeColor}`;
+            }
+
+            openTextEditor = (init='') => { 
+                this.dom.modals.text.classList.remove('hidden'); 
+                document.getElementById('textInput').value = init; 
+                this.state.text.currentEl = null; 
+            }
+            
+            editExistingText = (el) => { 
+                this.state.text.currentEl = el; 
+                this.openTextEditor(el.childNodes[0].textContent);
+                this.state.text.color = el.dataset.color;
+                this.state.text.strokeColor = el.dataset.strokeColor;
+                this.state.text.font = el.dataset.font;
+                this.state.text.stroke = parseFloat(el.dataset.stroke);
+                this.state.text.size = parseFloat(el.dataset.size);
+                
+                this.dom.textEditor.sizeSlider.value = this.state.text.size;
+                this.dom.textEditor.sizeDisplay.textContent = this.state.text.size + 'px';
+                this.dom.textEditor.strokeSlider.value = this.state.text.stroke;
+                this.dom.textEditor.strokeDisplay.textContent = this.state.text.stroke + '%';
+                
+                this.dom.textEditor.colorPalette.querySelector(`[style*="${this.state.text.color}"]`)?.click();
+                this.dom.textEditor.strokePalette.querySelector(`[style*="${this.state.text.strokeColor}"]`)?.click();
+                this.dom.textEditor.fontContainer.querySelector(`[data-font="${this.state.text.font}"]`)?.classList.add('tool-active');
+            }
+
+            makeTextDraggable = (el, onStart, onEnd) => {
+                let startX, startY, initLeft, initTop, hasMoved = false;
+                const onDown = (e) => {
+                    e.stopPropagation(); const evt = e.touches?e.touches[0]:e; startX = evt.clientX; startY = evt.clientY; initLeft = parseFloat(el.style.left); initTop = parseFloat(el.style.top);
+                    const onMove = (me) => { me.preventDefault(); const mevt = me.touches?me.touches[0]:me; if(!hasMoved && (Math.abs(mevt.clientX-startX)>5 || Math.abs(mevt.clientY-startY)>5)) { hasMoved=true; if(onStart) onStart(); } if(hasMoved) { const dx = (mevt.clientX-startX)/this.state.scale; const dy = (mevt.clientY-startY)/this.state.scale; el.style.left = (initLeft+dx)+'px'; el.style.top = (initTop+dy)+'px'; } };
+                    const onUp = () => { if(onEnd && hasMoved) onEnd(); document.removeEventListener('mousemove', onMove); document.removeEventListener('touchmove', onMove); document.removeEventListener('mouseup', onUp); document.removeEventListener('touchend', onUp); };
+                    document.addEventListener('mousemove', onMove); document.addEventListener('touchmove', onMove, {passive:false}); document.addEventListener('mouseup', onUp); document.addEventListener('touchend', onUp);
+                };
+                el.addEventListener('mousedown', onDown); el.addEventListener('touchstart', onDown, {passive:false});
+            }
+
+            openPreviewModal = () => { 
+                this.withLoading("生成預覽...", async()=>{ 
+                    const u = await this.generateCompositeImage(true); 
+                    document.getElementById('previewImage').src=u; 
+                    this.dom.modals.preview.classList.remove('hidden'); 
+                }); 
+            }
+            
+            generateCompositeImage = async (isPreview, sizeLimit=null) => {
+                const cvs = document.createElement('canvas');
+                cvs.width = this.dom.mainCanvas.width; cvs.height = this.dom.mainCanvas.height;
+                const ctx = cvs.getContext('2d');
+                const adj = this.state.adjustments;
+                ctx.filter = `brightness(${adj.brightness}%) contrast(${adj.contrast}%) saturate(${adj.saturation}%) ${adj.effect || ''}`;
+                ctx.drawImage(this.dom.mainCanvas, 0, 0);
+                ctx.filter = 'none';
+                Array.from(this.dom.textLayer.children).forEach(el => {
+                    const t = el.childNodes[0].textContent;
+                    const s = parseFloat(el.dataset.size); const f = el.dataset.font;
+                    this.drawTextOnCanvas(ctx, {
+                        text: t, size: s, font: f,
+                        stroke: parseFloat(el.dataset.stroke), 
+                        strokeColor: el.dataset.strokeColor, 
+                        color: el.dataset.color,
+                        x: parseFloat(el.style.left), 
+                        y: parseFloat(el.style.top)
+                    });
+                });
+                if(sizeLimit) {
+                    const sc = sizeLimit / Math.max(cvs.width, cvs.height);
+                    const t = document.createElement('canvas'); t.width=cvs.width*sc; t.height=cvs.height*sc;
+                    t.getContext('2d').drawImage(cvs,0,0,t.width,t.height);
+                    return new Promise(r=>t.toBlob(b=>r(URL.createObjectURL(b)), 'image/png'));
+                }
+                if(isPreview) return new Promise(r=>cvs.toBlob(b=>r(URL.createObjectURL(b)), 'image/png'));
+                return new Promise(r=>cvs.toBlob(r, 'image/png'));
+            }
+            
+            finishImage = () => {
+                this.withLoading("處理中...", async()=>{
+                    const sizeType = document.getElementById('stickerSizeSelect').value;
+                    const s = this.state.stickers.find(x => x.id === this.state.currentStickerId);
+                    const blob = await this.renderStickerToBlob(s, sizeType);
+                    document.getElementById('resultImage').src = URL.createObjectURL(blob);
+                    this.state.resultBlobUrl = URL.createObjectURL(blob);
+                    this.dom.modals.result.classList.remove('hidden');
+                    this.dom.modals.result.classList.add('flex');
+                });
+            }
+            
+            openOutlineModal = () => { this.dom.modals.outline.classList.remove('hidden'); }
+            
+            applyImageOutline = () => {
+                this.withLoading("正在套用描邊...", async () => {
+                    this.saveHistory();
+                    const w = this.dom.mainCanvas.width;
+                    const h = this.dom.mainCanvas.height;
+                    const img = new Image();
+
+                    img.onload = () => {
+                        const tCanvas = document.createElement('canvas');
+                        tCanvas.width = w; tCanvas.height = h;
+                        const tCtx = tCanvas.getContext('2d');
+                        const r = this.state.outline.width;
+                        const quality = 32;
+
+                        const tempColorCanvas = document.createElement('canvas');
+                        tempColorCanvas.width = w; tempColorCanvas.height = h;
+                        const tempCtx = tempColorCanvas.getContext('2d');
+                        
+                        tempCtx.fillStyle = this.state.outline.color;
+                        tempCtx.fillRect(0, 0, w, h);
+                        tempCtx.globalCompositeOperation = 'destination-in';
+                        tempCtx.drawImage(img, 0, 0); 
+                        
+                        tCtx.globalCompositeOperation = 'source-over';
+                        tCtx.fillStyle = this.state.outline.color;
+
+                        for(let i=0; i<quality; i++) {
+                            const angle = (i/quality) * 2 * Math.PI;
+                            tCtx.drawImage(tempColorCanvas, r*Math.cos(angle), r*Math.sin(angle));
+                        }
+                        
+                        tCtx.globalCompositeOperation = 'destination-out';
+                        tCtx.drawImage(img, 0, 0); 
+                        
+                        tCtx.globalCompositeOperation = 'source-over';
+                        tCtx.drawImage(this.dom.mainCanvas, 0, 0); 
+                        
+                        this.ctx.clearRect(0, 0, w, h);
+                        this.ctx.drawImage(tCanvas, 0, 0);
+                        this.dom.modals.outline.classList.add('hidden');
+                        this.autoSave();
+                    };
+                    img.src = this.dom.mainCanvas.toDataURL();
+                });
+            }
+
+            applyShadow = () => {
+                this.withLoading("正在加上陰影...", async () => {
+                    this.saveHistory();
+                    const w = this.dom.mainCanvas.width;
+                    const h = this.dom.mainCanvas.height;
+                    const img = new Image();
+                    img.onload = () => {
+                        const tCanvas = document.createElement('canvas');
+                        tCanvas.width = w; tCanvas.height = h;
+                        const tCtx = tCanvas.getContext('2d');
+                        tCtx.shadowColor = this.state.shadow.color;
+                        tCtx.shadowBlur = this.state.shadow.blur;
+                        tCtx.shadowOffsetX = this.state.shadow.x;
+                        tCtx.shadowOffsetY = this.state.shadow.y;
+                        tCtx.drawImage(img, 0, 0);
+                        this.ctx.clearRect(0, 0, w, h);
+                        this.ctx.drawImage(tCanvas, 0, 0);
+                        this.dom.modals.shadow.classList.add('hidden');
+                        this.autoSave();
+                    };
+                    img.src = this.dom.mainCanvas.toDataURL();
+                });
+            }
+            
+            openAdjustModal = () => { this.dom.modals.adjust.classList.remove('hidden'); }
+            
+            updateBrushCursor = () => {
+                if(this.state.currentTool === 'move' || !this.state.currentStickerId) return;
+                const vs = this.state.brushSize * this.state.scale;
+                this.dom.brushCursor.style.width = vs + 'px';
+                this.dom.brushCursor.style.height = vs + 'px';
+                this.dom.brushCursor.style.borderRadius = this.state.brushShape === 'circle' ? '50%' : '0';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => { window.app = new StickerLab(); });
+    </script>
+</body>
+</html>
